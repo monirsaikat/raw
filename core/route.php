@@ -37,6 +37,13 @@ function post($path, $action, $name = null)
     ];
 }
 
+function base_path()
+{
+    // dirname() returns a bare "\" (not "/") for a root script on Windows,
+    // which rtrim(..., '/') doesn't strip — normalize before trimming.
+    return rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
+}
+
 function navigate(array $params)
 {
     global $routes;
@@ -46,7 +53,7 @@ function navigate(array $params)
     foreach ($routes as $items) {
         foreach ($items as $path => $route) {
             if ($route['name'] === $name) {
-                return rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . $path;
+                return base_path() . $path;
             }
         }
     }
@@ -73,42 +80,54 @@ function route()
     $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
     $method = $_SERVER['REQUEST_METHOD'];
 
-    $base = dirname($_SERVER['SCRIPT_NAME']);
+    $base = base_path();
 
     $path = substr($uri, strlen($base));
     $path = '/' . trim($path, '/');
 
     $methodRoutes = $routes[$method] ?? [];
 
+    $matched = null;
+    $matches = [];
+
     // Static routes hit an O(1) array lookup, skipping regex work entirely.
     if (isset($methodRoutes[$path])) {
-        echo action($methodRoutes[$path]['action']);
+        $matched = $methodRoutes[$path];
+    } else {
+        foreach ($methodRoutes as $route => $item) {
+
+            if (!str_contains($route, '{')) {
+                continue;
+            }
+
+            $pattern = preg_replace(
+                '#\{([^}]+)\}#',
+                '([^/]+)',
+                $route
+            );
+
+            if (preg_match("#^$pattern$#", $path, $matches)) {
+                array_shift($matches);
+                $matched = $item;
+
+                break;
+            }
+        }
+    }
+
+    if ($matched === null) {
+        http_response_code(404);
+        echo view('views/404');
 
         return;
     }
 
-    foreach ($methodRoutes as $route => $item) {
+    if ($method !== 'GET' && !csrf_verify()) {
+        http_response_code(419);
+        echo view('views/419');
 
-        if (!str_contains($route, '{')) {
-            continue;
-        }
-
-        $pattern = preg_replace(
-            '#\{([^}]+)\}#',
-            '([^/]+)',
-            $route
-        );
-
-        if (preg_match("#^$pattern$#", $path, $matches)) {
-
-            array_shift($matches);
-
-            echo action($item['action'], $matches);
-
-            return;
-        }
+        return;
     }
 
-    http_response_code(404);
-    exit('404 Not Found');
+    echo action($matched['action'], $matches);
 }

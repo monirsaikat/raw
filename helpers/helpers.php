@@ -14,7 +14,5 @@ function view(string $template, array $data = [])
 
 function asset($path)
 {
-    $base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-
-    return $base . '/' . ltrim($path, '/');
+    return base_path() . '/' . ltrim($path, '/');
 }

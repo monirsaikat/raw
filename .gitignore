@@ -1,3 +1,4 @@
 templates_c
 ./templates_c
 bootstrap/cache
+.env

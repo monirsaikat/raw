@@ -3,6 +3,17 @@
 function session_start_if_needed()
 {
     if (session_status() === PHP_SESSION_NONE) {
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'domain' => '',
+            'secure' => env('SESSION_SECURE_COOKIE', false),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+
+        ini_set('session.use_strict_mode', '1');
+
         session_start();
     }
 }
