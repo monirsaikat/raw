@@ -29,6 +29,7 @@ require_once __DIR__ . '/core/route.php';
 require_once __DIR__ . '/core/flash.php';
 require_once __DIR__ . '/core/csrf.php';
 require_once __DIR__ . '/core/validation.php';
+require_once __DIR__ . '/core/auth.php';
 
 send_security_headers();
 

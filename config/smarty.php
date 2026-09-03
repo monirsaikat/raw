@@ -15,6 +15,9 @@ $smarty->registerPlugin('function', 'csrf_field', 'csrf_field');
 $smarty->registerPlugin('function', 'method_field', 'method_field');
 $smarty->registerPlugin('function', 'current_year', 'current_year');
 
+// Available in every template (used by the shared nav to show login state).
+$smarty->assign('auth_user', function_exists('auth_user') ? auth_user() : null);
+
 // Auto-escapes {$var} output so views are XSS-safe by default.
 // Use {$var|raw} for the rare case where trusted HTML must pass through.
 $smarty->setEscapeHtml(true);

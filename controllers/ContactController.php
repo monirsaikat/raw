@@ -31,6 +31,11 @@ class ContactController
             return redirect(navigate(['name' => 'contact']));
         }
 
+        Database::insert(
+            'INSERT INTO messages (name, email, message) VALUES (?, ?, ?)',
+            [$data['name'], $data['email'], $data['message']]
+        );
+
         flash('success', "Thanks, {$data['name']}! Your message has been received.");
 
         return redirect(navigate(['name' => 'contact']));

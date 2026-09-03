@@ -59,3 +59,11 @@ function session_end()
         session_destroy();
     }
 }
+
+// Issues a fresh session ID, keeping the data — call on login/register/logout
+// to prevent session fixation across a privilege change.
+function session_regenerate()
+{
+    session_start_if_needed();
+    session_regenerate_id(true);
+}

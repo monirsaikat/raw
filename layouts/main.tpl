@@ -38,9 +38,24 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{navigate name='contact'}">Contact</a>
                     </li>
-                    <li class="nav-item ms-md-2">
-                        <a class="btn btn-brand btn-sm px-3" href="{navigate name='contact'}">Get in touch</a>
-                    </li>
+                    {if $auth_user}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{navigate name='account'}">{$auth_user.name}</a>
+                        </li>
+                        <li class="nav-item ms-md-2">
+                            <form method="post" action="{navigate name='logout'}" class="d-inline">
+                                {csrf_field}
+                                <button type="submit" class="btn btn-brand-outline btn-sm px-3">Log out</button>
+                            </form>
+                        </li>
+                    {else}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{navigate name='login'}">Login</a>
+                        </li>
+                        <li class="nav-item ms-md-2">
+                            <a class="btn btn-brand btn-sm px-3" href="{navigate name='register'}">Sign up</a>
+                        </li>
+                    {/if}
                 </ul>
             </div>
         </div>

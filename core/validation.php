@@ -28,6 +28,7 @@ function validate(array $data, array $rules): array
                 'alpha' => ($value !== null && $value !== '' && !ctype_alpha((string) $value)) ? "$field must contain only letters." : null,
                 'max' => ($value !== null && mb_strlen((string) $value) > (int) $param) ? "$field must not exceed $param characters." : null,
                 'min' => ($value !== null && $value !== '' && mb_strlen((string) $value) < (int) $param) ? "$field must be at least $param characters." : null,
+                'confirmed' => ($value !== null && $value !== '' && $value !== ($data[$field . '_confirmation'] ?? null)) ? "$field confirmation does not match." : null,
                 default => null,
             };
 

@@ -1,8 +1,15 @@
 <?php
 
-// CLI entry point. Usage: php console.php route:cache | route:clear
+// CLI entry point. Usage: php console.php route:cache|route:clear|migrate
+
+require_once __DIR__ . '/core/env.php';
+
+load_env(__DIR__ . '/.env');
+
+define('APP_DEBUG', env('APP_DEBUG', false));
 
 require_once __DIR__ . '/core/autoload.php';
+require_once __DIR__ . '/core/Database.php';
 require_once __DIR__ . '/core/route.php';
 
 $cacheFile = __DIR__ . '/bootstrap/cache/routes.php';
@@ -42,6 +49,20 @@ switch ($command) {
         }
         break;
 
+    case 'migrate':
+        require_once __DIR__ . '/core/Migrator.php';
+
+        $ran = (new Migrator(__DIR__ . '/database/migrations'))->run();
+
+        if (empty($ran)) {
+            echo "Nothing to migrate.\n";
+        } else {
+            foreach ($ran as $name) {
+                echo "Migrated: $name\n";
+            }
+        }
+        break;
+
     default:
-        echo "Usage: php console.php route:cache|route:clear\n";
+        echo "Usage: php console.php route:cache|route:clear|migrate\n";
 }
