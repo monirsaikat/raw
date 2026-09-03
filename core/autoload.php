@@ -2,10 +2,21 @@
 
 spl_autoload_register(function ($class) {
 
-    $file = __DIR__ . '/../controllers/' .
-        str_replace('\\', '/', $class) . '.php';
+    static $directories = [
+        __DIR__ . '/../controllers',
+        __DIR__ . '/../models',
+        __DIR__ . '/../services',
+    ];
 
-    if (file_exists($file)) {
-        require_once $file;
+    $relative = str_replace('\\', '/', $class) . '.php';
+
+    foreach ($directories as $directory) {
+        $file = $directory . '/' . $relative;
+
+        if (is_file($file)) {
+            require_once $file;
+
+            return;
+        }
     }
 });
