@@ -20,3 +20,13 @@ function csrf_verify()
 
     return is_string($token) && session_has('_csrf_token') && hash_equals(csrf_token(), $token);
 }
+
+middleware('csrf', function (callable $next) {
+    if (current_method() !== 'GET' && !csrf_verify()) {
+        http_response_code(419);
+
+        return view('views/419');
+    }
+
+    return $next();
+});

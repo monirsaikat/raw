@@ -11,6 +11,8 @@ require_once __DIR__ . '/core/security.php';
 require_once __DIR__ . '/core/session/session.php';
 require_once __DIR__ . '/core/view.php';
 require_once __DIR__ . '/helpers/helpers.php';
+require_once __DIR__ . '/core/Database.php';
+require_once __DIR__ . '/core/middleware.php';
 require_once __DIR__ . '/core/route.php';
 require_once __DIR__ . '/core/csrf.php';
 require_once __DIR__ . '/core/validation.php';

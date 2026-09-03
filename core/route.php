@@ -2,13 +2,14 @@
 
 $routes = [];
 
-function get($path, $action, $name = null)
+function get($path, $action, $name = null, array $middleware = [])
 {
     global $routes;
 
     $routes['GET'][$path] = [
         'action' => $action,
         'name' => $name,
+        'middleware' => $middleware,
     ];
 }
 
@@ -27,14 +28,55 @@ function request($key = null)
     return $_REQUEST[$key] ?? null;
 }
 
-function post($path, $action, $name = null)
+function post($path, $action, $name = null, array $middleware = [])
 {
     global $routes;
 
     $routes['POST'][$path] = [
         'action' => $action,
-        'name' => $name
+        'name' => $name,
+        'middleware' => $middleware,
     ];
+}
+
+function put($path, $action, $name = null, array $middleware = [])
+{
+    global $routes;
+
+    $routes['PUT'][$path] = [
+        'action' => $action,
+        'name' => $name,
+        'middleware' => $middleware,
+    ];
+}
+
+function patch($path, $action, $name = null, array $middleware = [])
+{
+    global $routes;
+
+    $routes['PATCH'][$path] = [
+        'action' => $action,
+        'name' => $name,
+        'middleware' => $middleware,
+    ];
+}
+
+function delete($path, $action, $name = null, array $middleware = [])
+{
+    global $routes;
+
+    $routes['DELETE'][$path] = [
+        'action' => $action,
+        'name' => $name,
+        'middleware' => $middleware,
+    ];
+}
+
+function method_field($params = [])
+{
+    $method = strtoupper($params['method'] ?? '');
+
+    return '<input type="hidden" name="_method" value="' . htmlspecialchars($method, ENT_QUOTES) . '">';
 }
 
 function base_path()
@@ -73,12 +115,35 @@ function action($action, $params = [])
     return (new $controller)->$method(...$params);
 }
 
+function current_method(?string $set = null)
+{
+    static $method = null;
+
+    if ($set !== null) {
+        $method = $set;
+    }
+
+    return $method;
+}
+
 function route()
 {
     global $routes;
 
     $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
     $method = $_SERVER['REQUEST_METHOD'];
+
+    // HTML forms can only submit GET/POST, so a real PUT/PATCH/DELETE route
+    // is reached via a spoofed _method field on a POST request.
+    if ($method === 'POST') {
+        $spoof = strtoupper((string) ($_POST['_method'] ?? ''));
+
+        if (in_array($spoof, ['PUT', 'PATCH', 'DELETE'], true)) {
+            $method = $spoof;
+        }
+    }
+
+    current_method($method);
 
     $base = base_path();
 
@@ -122,12 +187,7 @@ function route()
         return;
     }
 
-    if ($method !== 'GET' && !csrf_verify()) {
-        http_response_code(419);
-        echo view('views/419');
+    $chain = array_merge(global_middleware(), $matched['middleware'] ?? []);
 
-        return;
-    }
-
-    echo action($matched['action'], $matches);
+    echo run_middleware($chain, fn () => action($matched['action'], $matches));
 }
