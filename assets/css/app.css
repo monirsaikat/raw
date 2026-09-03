@@ -1,0 +1,239 @@
+:root {
+    --brand: #ee6c4d;
+    --brand-dark: #d85a3d;
+    --brand-soft: #fdece6;
+    --ink: #1f2328;
+    --muted: #6b7280;
+    --border: #eceef0;
+    --bg: #fdfcfb;
+    --radius: 12px;
+}
+
+body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+a {
+    text-decoration: none;
+}
+
+/* Navbar */
+
+.site-navbar {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+}
+
+.site-navbar .navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.site-navbar .brand-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--brand);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.site-navbar .nav-link {
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.site-navbar .nav-link.active,
+.site-navbar .nav-link:hover {
+    color: var(--ink);
+}
+
+/* Buttons */
+
+.btn-brand {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: #fff;
+    font-weight: 600;
+}
+
+.btn-brand:hover {
+    background: var(--brand-dark);
+    border-color: var(--brand-dark);
+    color: #fff;
+}
+
+.btn-brand-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.btn-brand-outline:hover {
+    border-color: var(--brand);
+    color: var(--brand);
+}
+
+/* Hero */
+
+.hero {
+    padding: 4.5rem 0 3rem;
+    text-align: center;
+}
+
+.hero h1 {
+    font-weight: 800;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.02em;
+}
+
+.hero p.lead {
+    color: var(--muted);
+    max-width: 40rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Ranked / list rows */
+
+.rank-list {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.rank-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.rank-row:last-child {
+    border-bottom: none;
+}
+
+.rank-row .rank-number {
+    width: 2rem;
+    flex-shrink: 0;
+    font-weight: 700;
+    color: var(--muted);
+    text-align: center;
+}
+
+.rank-row .rank-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--brand-soft);
+    color: var(--brand-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.rank-row .rank-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.rank-row .rank-body h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.rank-row .rank-body p {
+    margin: 0.15rem 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rank-row .rank-meta {
+    text-align: right;
+    flex-shrink: 0;
+    font-weight: 700;
+    color: var(--brand);
+}
+
+/* Feature / stat cards */
+
+.feature-card,
+.stat-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    height: 100%;
+}
+
+.feature-card .icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--brand-soft);
+    color: var(--brand-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+}
+
+.stat-card {
+    text-align: center;
+}
+
+.stat-card .stat-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--brand);
+}
+
+.stat-card .stat-label {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+/* Contact form card */
+
+.contact-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+}
+
+/* Footer */
+
+.site-footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.site-footer a {
+    color: var(--muted);
+}
+
+.site-footer a:hover {
+    color: var(--ink);
+}
