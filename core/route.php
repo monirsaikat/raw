@@ -62,8 +62,7 @@ function action($action, $params = [])
 
     [$controller, $method] = explode('@', $action);
 
-    require_once __DIR__ . '/../controllers/' . $controller . '.php';
-
+    // Controller classes are resolved by core/autoload.php.
     return (new $controller)->$method(...$params);
 }
 
@@ -79,7 +78,20 @@ function route()
     $path = substr($uri, strlen($base));
     $path = '/' . trim($path, '/');
 
-    foreach ($routes[$method] ?? [] as $route => $item) {
+    $methodRoutes = $routes[$method] ?? [];
+
+    // Static routes hit an O(1) array lookup, skipping regex work entirely.
+    if (isset($methodRoutes[$path])) {
+        echo action($methodRoutes[$path]['action']);
+
+        return;
+    }
+
+    foreach ($methodRoutes as $route => $item) {
+
+        if (!str_contains($route, '{')) {
+            continue;
+        }
 
         $pattern = preg_replace(
             '#\{([^}]+)\}#',
@@ -91,7 +103,7 @@ function route()
 
             array_shift($matches);
 
-            echo $item['action'](...$matches);
+            echo action($item['action'], $matches);
 
             return;
         }

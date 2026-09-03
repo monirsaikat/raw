@@ -1,5 +1,5 @@
 <?php 
 
-get('/', [new HomeController(), 'index'], 'home');
-get('/about', [new HomeController(), 'about'], 'about');
-get('/user/{id}', [new UserController(), 'show'], 'user');
+get('/', 'HomeController@index', 'home');
+get('/about', 'HomeController@about', 'about');
+get('/user/{id}', 'UserController@show', 'user');
