@@ -1,193 +1,427 @@
 <?php
 
-$routes = [];
+// Routing. Routes are plain arrays (so `route:cache` can var_export them),
+// static paths are matched with an O(1) array lookup, and dynamic paths use
+// regexes compiled once at registration time. Placeholders: {id}, {id:\d+},
+// {slug?} (optional, must be the last segment).
 
-function get($path, $action, $name = null, array $middleware = [])
+$routes = [];       // [METHOD][path] => route definition
+$routeNames = [];   // name => path template
+$routeGroup = ['prefix' => '', 'middleware' => [], 'name' => ''];
+$currentRoute = null;
+
+function routes_reset(): void
+{
+    global $routes, $routeNames, $routeGroup, $currentRoute;
+
+    $routes = [];
+    $routeNames = [];
+    $routeGroup = ['prefix' => '', 'middleware' => [], 'name' => ''];
+    $currentRoute = null;
+}
+
+function routes_all(): array
 {
     global $routes;
 
-    $routes['GET'][$path] = [
+    return $routes;
+}
+
+function route_names(): array
+{
+    global $routeNames;
+
+    return $routeNames;
+}
+
+// Restores the arrays produced by `route:cache`.
+function routes_load(array $payload): void
+{
+    global $routes, $routeNames;
+
+    $routes = $payload['routes'] ?? [];
+    $routeNames = $payload['names'] ?? [];
+}
+
+function add_route(array $methods, string $path, $action, ?string $name = null, array $middleware = []): array
+{
+    global $routes, $routeNames, $routeGroup;
+
+    $path = '/' . trim($routeGroup['prefix'] . '/' . trim($path, '/'), '/');
+
+    $route = [
+        'path' => $path,
+        'methods' => array_map('strtoupper', $methods),
         'action' => $action,
-        'name' => $name,
-        'middleware' => $middleware,
+        'name' => $name !== null ? $routeGroup['name'] . $name : null,
+        'middleware' => array_values(array_unique(array_merge($routeGroup['middleware'], $middleware))),
     ];
-}
 
-function redirect($url)
-{
-    header("Location: $url");
-    exit;
-}
-
-function request($key = null)
-{
-    if ($key === null) {
-        return $_REQUEST;
+    if (str_contains($path, '{')) {
+        [$route['pattern'], $route['params']] = compile_route($path);
     }
 
-    return $_REQUEST[$key] ?? null;
+    foreach ($route['methods'] as $method) {
+        $routes[$method][$path] = $route;
+    }
+
+    if ($route['name'] !== null) {
+        $routeNames[$route['name']] = $path;
+    }
+
+    return $route;
 }
 
-function post($path, $action, $name = null, array $middleware = [])
+function get(string $path, $action, ?string $name = null, array $middleware = []): array
 {
-    global $routes;
+    return add_route(['GET'], $path, $action, $name, $middleware);
+}
 
-    $routes['POST'][$path] = [
-        'action' => $action,
-        'name' => $name,
-        'middleware' => $middleware,
+function post(string $path, $action, ?string $name = null, array $middleware = []): array
+{
+    return add_route(['POST'], $path, $action, $name, $middleware);
+}
+
+function put(string $path, $action, ?string $name = null, array $middleware = []): array
+{
+    return add_route(['PUT'], $path, $action, $name, $middleware);
+}
+
+function patch(string $path, $action, ?string $name = null, array $middleware = []): array
+{
+    return add_route(['PATCH'], $path, $action, $name, $middleware);
+}
+
+function delete(string $path, $action, ?string $name = null, array $middleware = []): array
+{
+    return add_route(['DELETE'], $path, $action, $name, $middleware);
+}
+
+function any(string $path, $action, ?string $name = null, array $middleware = []): array
+{
+    return add_route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], $path, $action, $name, $middleware);
+}
+
+function route_map(array $methods, string $path, $action, ?string $name = null, array $middleware = []): array
+{
+    return add_route($methods, $path, $action, $name, $middleware);
+}
+
+// group(['prefix' => '/admin', 'middleware' => ['auth'], 'name' => 'admin.'], fn () => ...)
+function group(array $attributes, callable $callback): void
+{
+    global $routeGroup;
+
+    $previous = $routeGroup;
+
+    $routeGroup = [
+        'prefix' => rtrim($previous['prefix'] . '/' . trim((string) ($attributes['prefix'] ?? ''), '/'), '/'),
+        'middleware' => array_merge($previous['middleware'], (array) ($attributes['middleware'] ?? [])),
+        'name' => $previous['name'] . (string) ($attributes['name'] ?? ''),
     ];
+
+    try {
+        $callback();
+    } finally {
+        $routeGroup = $previous;
+    }
 }
 
-function put($path, $action, $name = null, array $middleware = [])
+// "/user/{id:\d+}/{tab?}" → ['#^/user/(?P<id>\d+)(?:/(?P<tab>[^/]+))?$#D', ['id', 'tab']]
+function compile_route(string $path): array
+{
+    $params = [];
+    $pattern = '';
+    $parts = preg_split('#(\{[^}]+\})#', $path, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+
+    foreach ($parts as $part) {
+        if ($part[0] === '{' && preg_match('#^\{([A-Za-z_][A-Za-z0-9_]*)(?::(.+?))?(\?)?\}$#', $part, $m)) {
+            $name = $m[1];
+            $regex = ($m[2] ?? '') !== '' ? $m[2] : '[^/]+';
+            $optional = ($m[3] ?? '') === '?';
+            $params[] = $name;
+            $group = '(?P<' . $name . '>' . $regex . ')';
+
+            if ($optional && str_ends_with($pattern, '/')) {
+                $pattern = substr($pattern, 0, -1) . '(?:/' . $group . ')?';
+            } elseif ($optional) {
+                $pattern .= $group . '?';
+            } else {
+                $pattern .= $group;
+            }
+
+            continue;
+        }
+
+        $pattern .= preg_quote($part, '#');
+    }
+
+    return ['#^' . $pattern . '$#D', $params];
+}
+
+// Returns ['route' => ..., 'params' => [name => value]] or null. HEAD falls
+// back to GET routes, as HTTP requires.
+function match_route(string $method, string $path): ?array
 {
     global $routes;
 
-    $routes['PUT'][$path] = [
-        'action' => $action,
-        'name' => $name,
-        'middleware' => $middleware,
-    ];
-}
+    $method = strtoupper($method);
+    $candidates = $method === 'HEAD' ? ['HEAD', 'GET'] : [$method];
 
-function patch($path, $action, $name = null, array $middleware = [])
-{
-    global $routes;
+    foreach ($candidates as $candidate) {
+        $table = $routes[$candidate] ?? [];
 
-    $routes['PATCH'][$path] = [
-        'action' => $action,
-        'name' => $name,
-        'middleware' => $middleware,
-    ];
-}
+        if (isset($table[$path])) {
+            return ['route' => $table[$path], 'params' => []];
+        }
 
-function delete($path, $action, $name = null, array $middleware = [])
-{
-    global $routes;
+        foreach ($table as $route) {
+            if (!isset($route['pattern'])) {
+                continue;
+            }
 
-    $routes['DELETE'][$path] = [
-        'action' => $action,
-        'name' => $name,
-        'middleware' => $middleware,
-    ];
-}
+            if (preg_match($route['pattern'], $path, $matches, PREG_UNMATCHED_AS_NULL)) {
+                $params = [];
 
-function method_field($params = [])
-{
-    $method = strtoupper($params['method'] ?? '');
+                foreach ($route['params'] as $name) {
+                    $params[$name] = isset($matches[$name]) ? rawurldecode($matches[$name]) : null;
+                }
 
-    return '<input type="hidden" name="_method" value="' . htmlspecialchars($method, ENT_QUOTES) . '">';
-}
-
-function base_path()
-{
-    // dirname() returns a bare "\" (not "/") for a root script on Windows,
-    // which rtrim(..., '/') doesn't strip — normalize before trimming.
-    return rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
-}
-
-function navigate(array $params)
-{
-    global $routes;
-
-    $name = $params['name'] ?? null;
-
-    foreach ($routes as $items) {
-        foreach ($items as $path => $route) {
-            if ($route['name'] === $name) {
-                return base_path() . $path;
+                return ['route' => $route, 'params' => $params];
             }
         }
     }
 
-    return '#';
+    return null;
 }
 
-function action($action, $params = [])
+// Methods that DO have a route for $path — used to answer 405 with Allow.
+function route_allowed_methods(string $path): array
 {
+    global $routes;
+
+    $allowed = [];
+
+    foreach (array_keys($routes) as $method) {
+        if (match_route($method, $path) !== null) {
+            $allowed[] = $method;
+        }
+    }
+
+    if (in_array('GET', $allowed, true) && !in_array('HEAD', $allowed, true)) {
+        $allowed[] = 'HEAD';
+    }
+
+    return $allowed;
+}
+
+function dispatch(string $method, string $path)
+{
+    global $currentRoute;
+
+    $match = match_route($method, $path);
+
+    if ($match === null) {
+        $allowed = route_allowed_methods($path);
+
+        if ($allowed !== []) {
+            abort(405, '', ['Allow' => implode(', ', $allowed)]);
+        }
+
+        abort(404);
+    }
+
+    $currentRoute = $match['route'];
+    $params = array_values($match['params']);
+    $chain = array_merge(global_middleware(), $match['route']['middleware'] ?? []);
+
+    return run_middleware($chain, fn () => action($match['route']['action'], $params));
+}
+
+// Web entry point: security headers, dispatch, send. Output is buffered so
+// an exception thrown mid-render can still replace the page cleanly.
+function route(): void
+{
+    ob_start();
+
+    send_security_headers();
+
+    $method = request_method();
+    $result = dispatch($method, request_path());
+
+    // Remember the last page for back() when a Referer is missing.
+    if ($method === 'GET' && session_status() === PHP_SESSION_ACTIVE && !wants_json() && !request_is_ajax()) {
+        $_SESSION['_previous_url'] = request_url();
+    }
+
+    send_response($result);
+
+    ob_end_flush();
+}
+
+// Invokes 'Controller@method', an invokable controller class name, a
+// [class, method] pair, or a closure with the route parameters.
+function action($action, array $params = [])
+{
+    if (is_string($action) && str_contains($action, '@')) {
+        [$controller, $method] = explode('@', $action, 2);
+
+        if (!class_exists($controller)) {
+            throw new RuntimeException("Controller [$controller] not found.");
+        }
+
+        if (!method_exists($controller, $method)) {
+            throw new RuntimeException("Method [$method] not found on [$controller].");
+        }
+
+        return (new $controller())->$method(...$params);
+    }
+
+    if (is_string($action) && class_exists($action) && method_exists($action, '__invoke')) {
+        return (new $action())(...$params);
+    }
+
+    if (is_array($action) && count($action) === 2 && is_string($action[0])) {
+        [$controller, $method] = $action;
+
+        return (new $controller())->$method(...$params);
+    }
+
     if (is_callable($action)) {
         return $action(...$params);
     }
 
-    [$controller, $method] = explode('@', $action);
-
-    // Controller classes are resolved by core/autoload.php.
-    return (new $controller)->$method(...$params);
+    throw new RuntimeException('Invalid route action.');
 }
 
-function current_method(?string $set = null)
+// Path prefix when the app lives in a sub-directory ("/saikat/test1").
+// Derived from the request, or fixed with config('app.base_path').
+function base_path(): string
 {
-    static $method = null;
+    $configured = config('app.base_path');
 
-    if ($set !== null) {
-        $method = $set;
+    if (is_string($configured)) {
+        return rtrim($configured, '/');
     }
 
-    return $method;
+    if (PHP_SAPI === 'cli') {
+        return '';
+    }
+
+    $base = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+
+    return $base === '.' ? '' : $base;
 }
 
-function route()
+// Absolute URL of the app root: config('app.url') or derived from the request.
+function app_url(): string
 {
-    global $routes;
+    $configured = rtrim((string) config('app.url', ''), '/');
 
-    $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-    $method = $_SERVER['REQUEST_METHOD'];
+    if ($configured !== '') {
+        return $configured;
+    }
 
-    // HTML forms can only submit GET/POST, so a real PUT/PATCH/DELETE route
-    // is reached via a spoofed _method field on a POST request.
-    if ($method === 'POST') {
-        $spoof = strtoupper((string) ($_POST['_method'] ?? ''));
+    if (PHP_SAPI === 'cli') {
+        return 'http://localhost';
+    }
 
-        if (in_array($spoof, ['PUT', 'PATCH', 'DELETE'], true)) {
-            $method = $spoof;
+    return (request_is_secure() ? 'https' : 'http') . '://' . request_host() . base_path();
+}
+
+// url('about') → "/saikat/test1/about". Also a Smarty function: {url path='about'}.
+function url($path = ''): string
+{
+    if (is_array($path)) {
+        return htmlspecialchars(url((string) ($path['path'] ?? '')), ENT_QUOTES, 'UTF-8');
+    }
+
+    return base_path() . '/' . ltrim($path, '/');
+}
+
+// route_url('user', ['id' => 5, 'tab' => 'posts']) → "/user/5?tab=posts".
+// Placeholders are filled from $params; leftovers become the query string.
+function route_url(string $name, array $params = []): string
+{
+    global $routeNames;
+
+    if (!isset($routeNames[$name])) {
+        throw new RuntimeException("Route [$name] is not defined.");
+    }
+
+    $path = preg_replace_callback(
+        '#/?\{([A-Za-z_][A-Za-z0-9_]*)(?::[^}]*?)?(\?)?\}#',
+        function (array $m) use (&$params, $name): string {
+            $key = $m[1];
+            $optional = ($m[2] ?? '') === '?';
+            $slash = str_starts_with($m[0], '/') ? '/' : '';
+
+            if (isset($params[$key]) && $params[$key] !== '') {
+                $value = rawurlencode((string) $params[$key]);
+                unset($params[$key]);
+
+                return $slash . $value;
+            }
+
+            if ($optional) {
+                unset($params[$key]);
+
+                return '';
+            }
+
+            throw new RuntimeException("Missing parameter [$key] for route [$name].");
+        },
+        $routeNames[$name]
+    );
+
+    $url = base_path() . ($path === '' ? '/' : $path);
+
+    if ($params !== []) {
+        $url .= '?' . http_build_query($params);
+    }
+
+    return $url;
+}
+
+// Smarty function: {navigate name='user' id=$user.id} — output is escaped
+// for use inside HTML attributes.
+function navigate(array $params): string
+{
+    $name = (string) ($params['name'] ?? '');
+    unset($params['name']);
+
+    return htmlspecialchars(route_url($name, $params), ENT_QUOTES, 'UTF-8');
+}
+
+function current_route(): ?array
+{
+    global $currentRoute;
+
+    return $currentRoute;
+}
+
+function current_route_name(): ?string
+{
+    return current_route()['name'] ?? null;
+}
+
+// route_is('home'), route_is('admin.*'). Also a Smarty modifier:
+// {if 'home'|route_is} ... {/if}
+function route_is(string ...$patterns): bool
+{
+    $name = current_route_name();
+
+    if ($name === null) {
+        return false;
+    }
+
+    foreach ($patterns as $pattern) {
+        $regex = '#^' . str_replace('\*', '.*', preg_quote($pattern, '#')) . '$#';
+
+        if (preg_match($regex, $name)) {
+            return true;
         }
     }
 
-    current_method($method);
-
-    $base = base_path();
-
-    $path = substr($uri, strlen($base));
-    $path = '/' . trim($path, '/');
-
-    $methodRoutes = $routes[$method] ?? [];
-
-    $matched = null;
-    $matches = [];
-
-    // Static routes hit an O(1) array lookup, skipping regex work entirely.
-    if (isset($methodRoutes[$path])) {
-        $matched = $methodRoutes[$path];
-    } else {
-        foreach ($methodRoutes as $route => $item) {
-
-            if (!str_contains($route, '{')) {
-                continue;
-            }
-
-            $pattern = preg_replace(
-                '#\{([^}]+)\}#',
-                '([^/]+)',
-                $route
-            );
-
-            if (preg_match("#^$pattern$#", $path, $matches)) {
-                array_shift($matches);
-                $matched = $item;
-
-                break;
-            }
-        }
-    }
-
-    if ($matched === null) {
-        http_response_code(404);
-        echo view('views/404');
-
-        return;
-    }
-
-    $chain = array_merge(global_middleware(), $matched['middleware'] ?? []);
-
-    echo run_middleware($chain, fn () => action($matched['action'], $matches));
+    return false;
 }

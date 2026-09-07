@@ -4,78 +4,58 @@ class AuthController
 {
     public function showRegister()
     {
-        return view('views/auth/register', [
-            'errors' => flash('errors') ?? [],
-            'old' => array_merge(['name' => '', 'email' => ''], flash('old') ?? []),
-        ]);
+        return view('auth/register');
     }
 
     public function register()
     {
-        $data = input();
-
-        $errors = validate($data, [
+        $data = validated(input(), [
             'name' => 'required|max:100',
-            'email' => 'required|email|max:150',
+            'email' => 'required|email|max:150|unique:users,email',
             'password' => 'required|min:8|confirmed',
+        ], [
+            'email.unique' => 'An account with this email already exists.',
         ]);
 
-        if (empty($errors['email']) && User::findByEmail($data['email'] ?? '')) {
-            $errors['email'][] = 'An account with this email already exists.';
-        }
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => User::hashPassword($data['password']),
+        ]);
 
-        if ($errors) {
-            flash('errors', $errors);
-            flash('old', ['name' => $data['name'] ?? '', 'email' => $data['email'] ?? '']);
+        auth_login($user);
 
-            return redirect(navigate(['name' => 'register']));
-        }
-
-        $id = User::create($data['name'], $data['email'], $data['password']);
-
-        auth_login($id);
-
-        return redirect(navigate(['name' => 'account']));
+        return redirect_route('account');
     }
 
     public function showLogin()
     {
-        return view('views/auth/login', [
-            'errors' => flash('errors') ?? [],
-            'old' => array_merge(['email' => ''], flash('old') ?? []),
-        ]);
+        return view('auth/login');
     }
 
     public function login()
     {
-        $data = input();
+        $data = validated(input(), [
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
 
-        $email = $data['email'] ?? null;
-        $user = $email !== null ? User::findByEmail($email) : null;
-
-        if (!$user || !password_verify($data['password'] ?? '', $user['password'])) {
-            flash('errors', ['email' => ['Those credentials do not match our records.']]);
-            flash('old', ['email' => $data['email'] ?? '']);
-
-            return redirect(navigate(['name' => 'login']));
+        if (!auth_attempt($data['email'], $data['password'], has_input('remember'))) {
+            return back_with_errors(['email' => ['Those credentials do not match our records.']]);
         }
 
-        auth_login($user['id']);
-
-        return redirect(navigate(['name' => 'account']));
+        return auth_intended(route_url('account'));
     }
 
     public function logout()
     {
         auth_logout();
 
-        return redirect(navigate(['name' => 'home']));
+        return redirect_route('home');
     }
 
     public function account()
     {
-        return view('views/account', [
-            'user' => auth_user(),
-        ]);
+        return view('account', ['user' => auth_user()]);
     }
 }

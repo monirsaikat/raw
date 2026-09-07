@@ -1,68 +1,462 @@
 <?php
 
-// CLI entry point. Usage: php console.php route:cache|route:clear|migrate
+// CLI entry point: php console.php <command> [arguments]
+// Run without arguments to list the available commands.
 
-require_once __DIR__ . '/core/env.php';
+if (PHP_SAPI !== 'cli') {
+    exit('This script can only be run from the command line.');
+}
 
-load_env(__DIR__ . '/.env');
+require_once __DIR__ . '/core/bootstrap.php';
 
-define('APP_DEBUG', env('APP_DEBUG', false));
+$commands = [];
 
-require_once __DIR__ . '/core/autoload.php';
-require_once __DIR__ . '/core/Database.php';
-require_once __DIR__ . '/core/route.php';
+function command(string $name, string $description, callable $handler): void
+{
+    global $commands;
 
-$cacheFile = __DIR__ . '/bootstrap/cache/routes.php';
-$command = $argv[1] ?? null;
+    $commands[$name] = ['description' => $description, 'handler' => $handler];
+}
 
-switch ($command) {
-    case 'route:cache':
-        require __DIR__ . '/routes/web.php';
+function line(string $text = ''): void
+{
+    echo $text, PHP_EOL;
+}
 
-        foreach ($routes as $items) {
-            foreach ($items as $item) {
-                if (!is_string($item['action'])) {
-                    fwrite(STDERR, "Cannot cache a closure route — use 'Controller@method' action strings only.\n");
-                    exit(1);
-                }
+function error_line(string $text): void
+{
+    fwrite(STDERR, $text . PHP_EOL);
+}
+
+function relative_path(string $path): string
+{
+    return ltrim(str_replace(BASE_PATH, '', str_replace('\\', '/', $path)), '/');
+}
+
+// Writes a generated file, refusing to overwrite an existing one.
+function write_stub(string $path, string $contents): bool
+{
+    if (file_exists($path)) {
+        error_line('Already exists: ' . relative_path($path));
+
+        return false;
+    }
+
+    $directory = dirname($path);
+
+    if (!is_dir($directory)) {
+        mkdir($directory, 0755, true);
+    }
+
+    file_put_contents($path, $contents);
+    line('Created ' . relative_path($path));
+
+    return true;
+}
+
+function load_routes(): void
+{
+    routes_reset();
+
+    require BASE_PATH . '/routes/web.php';
+}
+
+function print_table(array $headers, array $rows): void
+{
+    $widths = array_map('strlen', $headers);
+
+    foreach ($rows as $row) {
+        foreach (array_values($row) as $i => $cell) {
+            $widths[$i] = max($widths[$i], strlen((string) $cell));
+        }
+    }
+
+    $format = implode('  ', array_map(fn ($w) => '%-' . $w . 's', $widths));
+
+    line(rtrim(sprintf($format, ...$headers)));
+    line(rtrim(sprintf($format, ...array_map(fn ($w) => str_repeat('-', $w), $widths))));
+
+    foreach ($rows as $row) {
+        line(rtrim(sprintf($format, ...array_values($row))));
+    }
+}
+
+// ------------------------------------------------------------------------
+
+command('help', 'List the available commands', function () {
+    global $commands;
+
+    line('Usage: php console.php <command> [arguments]');
+    line();
+
+    $width = max(array_map('strlen', array_keys($commands)));
+
+    foreach ($commands as $name => $command) {
+        line('  ' . str_pad($name, $width + 2) . $command['description']);
+    }
+
+    return 0;
+});
+
+command('serve', 'Start the development server [host:port, default 127.0.0.1:8000]', function (array $args) {
+    $host = $args[0] ?? '127.0.0.1:8000';
+
+    line("Serving on http://$host — press Ctrl+C to stop");
+
+    passthru(sprintf(
+        '%s -S %s -t %s %s',
+        escapeshellarg(PHP_BINARY),
+        escapeshellarg($host),
+        escapeshellarg(BASE_PATH),
+        escapeshellarg(BASE_PATH . '/index.php')
+    ), $code);
+
+    return $code;
+});
+
+command('route:list', 'Show every registered route', function () {
+    load_routes();
+
+    $rows = [];
+
+    foreach (routes_all() as $method => $routes) {
+        foreach ($routes as $path => $route) {
+            $action = $route['action'];
+            $rows[] = [
+                $method,
+                $path,
+                $route['name'] ?? '',
+                is_string($action) ? $action : (is_array($action) ? implode('@', $action) : 'Closure'),
+                implode(', ', $route['middleware']),
+            ];
+        }
+    }
+
+    usort($rows, fn ($a, $b) => [$a[1], $a[0]] <=> [$b[1], $b[0]]);
+
+    print_table(['Method', 'Path', 'Name', 'Action', 'Middleware'], $rows);
+
+    return 0;
+});
+
+command('route:cache', 'Compile routes/web.php into bootstrap/cache for production', function () {
+    load_routes();
+
+    foreach (routes_all() as $routes) {
+        foreach ($routes as $path => $route) {
+            if (!is_string($route['action']) && !is_array($route['action'])) {
+                error_line("Cannot cache route [$path]: closure actions are not serialisable. Use 'Controller@method'.");
+
+                return 1;
             }
         }
+    }
 
-        if (!is_dir(dirname($cacheFile))) {
-            mkdir(dirname($cacheFile), 0755, true);
+    $file = BASE_PATH . '/bootstrap/cache/routes.php';
+
+    if (!is_dir(dirname($file))) {
+        mkdir(dirname($file), 0755, true);
+    }
+
+    $payload = ['routes' => routes_all(), 'names' => route_names()];
+
+    file_put_contents(
+        $file,
+        "<?php\n\n// Generated by `php console.php route:cache`. Do not edit by hand.\nreturn "
+            . var_export($payload, true) . ";\n"
+    );
+
+    line('Routes cached to ' . relative_path($file));
+
+    return 0;
+});
+
+command('route:clear', 'Delete the compiled route table', function () {
+    $file = BASE_PATH . '/bootstrap/cache/routes.php';
+
+    if (is_file($file)) {
+        unlink($file);
+        line('Route cache cleared.');
+    } else {
+        line('No route cache to clear.');
+    }
+
+    return 0;
+});
+
+command('view:clear', 'Delete compiled templates', function () {
+    $count = 0;
+
+    foreach (glob((string) config('view.compiled') . '/*.php') ?: [] as $file) {
+        if (unlink($file)) {
+            $count++;
+        }
+    }
+
+    line("Removed $count compiled template(s).");
+
+    return 0;
+});
+
+command('cache:clear', 'Delete application cache files (including rate-limit counters)', function () {
+    line('Removed ' . cache_flush() . ' cache file(s).');
+
+    return 0;
+});
+
+command('key:generate', 'Set a random APP_KEY in .env', function () {
+    $env = BASE_PATH . '/.env';
+
+    if (!is_file($env)) {
+        if (!is_file(BASE_PATH . '/.env.example')) {
+            error_line('No .env or .env.example found.');
+
+            return 1;
         }
 
-        file_put_contents(
-            $cacheFile,
-            "<?php\n\n// Generated by `php console.php route:cache`. Do not edit by hand.\nreturn " . var_export($routes, true) . ";\n"
+        copy(BASE_PATH . '/.env.example', $env);
+        line('Created .env from .env.example');
+    }
+
+    $key = 'base64:' . base64_encode(random_bytes(32));
+    $contents = (string) file_get_contents($env);
+
+    if (preg_match('/^APP_KEY=.*$/m', $contents)) {
+        $contents = preg_replace('/^APP_KEY=.*$/m', 'APP_KEY=' . $key, $contents);
+    } else {
+        $contents = rtrim($contents) . "\nAPP_KEY=" . $key . "\n";
+    }
+
+    file_put_contents($env, $contents);
+    line('Application key set.');
+
+    return 0;
+});
+
+command('migrate', 'Run pending database migrations', function () {
+    $ran = (new Migrator(BASE_PATH . '/database/migrations'))->run();
+
+    if ($ran === []) {
+        line('Nothing to migrate.');
+    }
+
+    foreach ($ran as $name) {
+        line("Migrated: $name");
+    }
+
+    return 0;
+});
+
+command('migrate:rollback', 'Revert the last batch of migrations [steps, default 1]', function (array $args) {
+    $rolled = (new Migrator(BASE_PATH . '/database/migrations'))->rollback(max(1, (int) ($args[0] ?? 1)));
+
+    if ($rolled === []) {
+        line('Nothing to roll back.');
+    }
+
+    foreach ($rolled as $name) {
+        line("Rolled back: $name");
+    }
+
+    return 0;
+});
+
+command('migrate:status', 'Show which migrations have run', function () {
+    $rows = [];
+
+    foreach ((new Migrator(BASE_PATH . '/database/migrations'))->status() as $row) {
+        $rows[] = [
+            $row['batch'] === null ? 'Pending' : 'Ran',
+            $row['migration'],
+            $row['batch'] ?? '',
+            $row['ran_at'] ?? '',
+        ];
+    }
+
+    print_table(['Status', 'Migration', 'Batch', 'Ran at'], $rows);
+
+    return 0;
+});
+
+command('make:migration', 'Create a migration file [name, e.g. create_posts_table]', function (array $args) {
+    $name = str_snake(trim((string) ($args[0] ?? '')));
+
+    if ($name === '') {
+        error_line('Usage: php console.php make:migration create_posts_table');
+
+        return 1;
+    }
+
+    $table = preg_match('/^create_(.+)_table$/', $name, $m) ? $m[1] : 'table_name';
+    $file = BASE_PATH . '/database/migrations/' . date('Y_m_d_His') . '_' . $name . '.sql';
+
+    return write_stub($file, <<<SQL
+        -- up
+        CREATE TABLE IF NOT EXISTS $table (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NULL
         );
 
-        echo "Routes cached to bootstrap/cache/routes.php\n";
-        break;
+        -- down
+        DROP TABLE IF EXISTS $table;
 
-    case 'route:clear':
-        if (file_exists($cacheFile)) {
-            unlink($cacheFile);
-            echo "Route cache cleared.\n";
-        } else {
-            echo "No route cache to clear.\n";
-        }
-        break;
+        SQL) ? 0 : 1;
+});
 
-    case 'migrate':
-        require_once __DIR__ . '/core/Migrator.php';
+command('make:controller', 'Create a controller class [name, e.g. Post or PostController]', function (array $args) {
+    $name = str_studly(trim((string) ($args[0] ?? '')));
 
-        $ran = (new Migrator(__DIR__ . '/database/migrations'))->run();
+    if ($name === '') {
+        error_line('Usage: php console.php make:controller PostController');
 
-        if (empty($ran)) {
-            echo "Nothing to migrate.\n";
-        } else {
-            foreach ($ran as $name) {
-                echo "Migrated: $name\n";
+        return 1;
+    }
+
+    if (!str_ends_with($name, 'Controller')) {
+        $name .= 'Controller';
+    }
+
+    $view = str_snake(substr($name, 0, -10));
+
+    return write_stub(BASE_PATH . '/controllers/' . $name . '.php', <<<PHP
+        <?php
+
+        class $name
+        {
+            public function index()
+            {
+                return view('$view');
             }
         }
-        break;
 
-    default:
-        echo "Usage: php console.php route:cache|route:clear|migrate\n";
+        PHP) ? 0 : 1;
+});
+
+command('make:model', 'Create a model class [name, e.g. Post]', function (array $args) {
+    $name = str_studly(trim((string) ($args[0] ?? '')));
+
+    if ($name === '') {
+        error_line('Usage: php console.php make:model Post');
+
+        return 1;
+    }
+
+    $table = str_plural(str_snake($name));
+
+    return write_stub(BASE_PATH . '/models/' . $name . '.php', <<<PHP
+        <?php
+
+        class $name extends Model
+        {
+            protected static string \$table = '$table';
+
+            // Columns that create()/fill()/update() may set from user input.
+            protected static array \$fillable = [];
+
+            // Columns left out of toArray() / JSON output.
+            protected static array \$hidden = [];
+        }
+
+        PHP) ? 0 : 1;
+});
+
+command('make:middleware', 'Create a middleware file [name, e.g. admin]', function (array $args) {
+    $name = str_snake(trim((string) ($args[0] ?? '')));
+
+    if ($name === '') {
+        error_line('Usage: php console.php make:middleware admin');
+
+        return 1;
+    }
+
+    return write_stub(BASE_PATH . '/middleware/' . $name . '.php', <<<PHP
+        <?php
+
+        // Loaded automatically by core/bootstrap.php. Attach it to a route:
+        //   get('/admin', 'AdminController@index', 'admin', ['$name']);
+        // or to every route with add_global_middleware('$name').
+
+        middleware('$name', function (callable \$next) {
+            // Return redirect()/abort() to stop the request here.
+
+            return \$next();
+        });
+
+        PHP) ? 0 : 1;
+});
+
+command('make:seeder', 'Create a database seeder [name, e.g. UserSeeder]', function (array $args) {
+    $name = str_studly(trim((string) ($args[0] ?? '')));
+
+    if ($name === '') {
+        error_line('Usage: php console.php make:seeder UserSeeder');
+
+        return 1;
+    }
+
+    return write_stub(BASE_PATH . '/database/seeders/' . $name . '.php', <<<PHP
+        <?php
+
+        // Run with: php console.php db:seed
+
+        return function (): void {
+            // User::create(['name' => 'Admin', 'email' => 'admin@example.com', 'password' => User::hashPassword('secret')]);
+        };
+
+        PHP) ? 0 : 1;
+});
+
+command('db:seed', 'Run every seeder in database/seeders', function () {
+    $files = glob(BASE_PATH . '/database/seeders/*.php') ?: [];
+
+    if ($files === []) {
+        line('No seeders found.');
+
+        return 0;
+    }
+
+    foreach ($files as $file) {
+        $seeder = require $file;
+
+        if (is_callable($seeder)) {
+            $seeder();
+        }
+
+        line('Seeded: ' . basename($file, '.php'));
+    }
+
+    return 0;
+});
+
+command('test', 'Run the test suite [optional filename filter]', function (array $args) {
+    require_once BASE_PATH . '/core/testing.php';
+
+    $filter = strtolower((string) ($args[0] ?? ''));
+    $files = array_values(array_filter(
+        glob(BASE_PATH . '/tests/*.php') ?: [],
+        fn ($file) => $filter === '' || str_contains(strtolower(basename($file)), $filter)
+    ));
+
+    if ($files === []) {
+        error_line('No test files matched.');
+
+        return 1;
+    }
+
+    return run_tests($files);
+});
+
+// ------------------------------------------------------------------------
+
+$name = $argv[1] ?? 'help';
+
+if (!isset($commands[$name])) {
+    error_line("Unknown command [$name].");
+    error_line('');
+    $commands['help']['handler']([]);
+
+    exit(1);
 }
+
+exit((int) $commands[$name]['handler'](array_slice($argv, 2)));

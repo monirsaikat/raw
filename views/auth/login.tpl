@@ -1,6 +1,6 @@
 {extends file='layouts/main.tpl'}
 
-{block name='title'}Login — YourApp{/block}
+{block name='title'}Login — {$app_name}{/block}
 
 {block name='content'}
 
@@ -22,7 +22,7 @@
                     <div class="mb-3">
                         <label for="email" class="form-label">Email</label>
                         <input type="email" class="form-control{if isset($errors.email)} is-invalid{/if}"
-                            id="email" name="email" value="{$old.email}">
+                            id="email" name="email" value="{$old.email|default:''}" autocomplete="email">
                         {if isset($errors.email)}
                             <div class="invalid-feedback">{$errors.email.0}</div>
                         {/if}
@@ -30,7 +30,17 @@
 
                     <div class="mb-3">
                         <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password">
+                        <input type="password" class="form-control{if isset($errors.password)} is-invalid{/if}"
+                            id="password" name="password" autocomplete="current-password">
+                        {if isset($errors.password)}
+                            <div class="invalid-feedback">{$errors.password.0}</div>
+                        {/if}
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" id="remember" name="remember" value="1"
+                            {if isset($old.remember)}checked{/if}>
+                        <label class="form-check-label" for="remember">Remember me</label>
                     </div>
 
                     <button type="submit" class="btn btn-brand px-4 py-2 w-100">Log in</button>

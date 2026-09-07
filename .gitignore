@@ -1,4 +1,11 @@
-templates_c
-./templates_c
-bootstrap/cache
-.env
+/.env
+
+# Generated at runtime
+/storage/logs/*
+!/storage/logs/.gitkeep
+/storage/cache/*
+!/storage/cache/.gitkeep
+/storage/views/*
+!/storage/views/.gitkeep
+/bootstrap/cache/*
+!/bootstrap/cache/.gitkeep

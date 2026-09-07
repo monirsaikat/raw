@@ -1,6 +1,6 @@
 {extends file='layouts/main.tpl'}
 
-{block name='title'}Register — YourApp{/block}
+{block name='title'}Register — {$app_name}{/block}
 
 {block name='content'}
 

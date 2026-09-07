@@ -1,22 +1,23 @@
 <?php
 
-class User
+class User extends Model
 {
-    public static function find($id): ?array
+    protected static string $table = 'users';
+    protected static array $fillable = ['name', 'email', 'password'];
+    protected static array $hidden = ['password', 'remember_token'];
+
+    public static function findByEmail(string $email): ?static
     {
-        return Database::selectOne('SELECT * FROM users WHERE id = ?', [$id]);
+        return static::where('email', $email)->first();
     }
 
-    public static function findByEmail(string $email): ?array
+    public static function hashPassword(string $password): string
     {
-        return Database::selectOne('SELECT * FROM users WHERE email = ?', [$email]);
+        return password_hash($password, PASSWORD_DEFAULT);
     }
 
-    public static function create(string $name, string $email, string $password): string
+    public function verifyPassword(string $password): bool
     {
-        return Database::insert(
-            'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
-            [$name, $email, password_hash($password, PASSWORD_DEFAULT)]
-        );
+        return password_verify($password, (string) $this->password);
     }
 }

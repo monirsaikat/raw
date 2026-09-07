@@ -1,12 +1,12 @@
 {extends file='layouts/main.tpl'}
 
-{block name='title'}About — YourApp{/block}
+{block name='title'}About — {$app_name}{/block}
 
 {block name='content'}
 
 <section class="hero pb-4">
     <div class="container">
-        <h1>About YourApp</h1>
+        <h1>About {$app_name}</h1>
         <p class="lead mx-auto">
             Placeholder copy describing what your company or product does, who
             it's for, and why it matters. Replace this paragraph with your own story.

@@ -1,6 +1,6 @@
 {extends file='layouts/main.tpl'}
 
-{block name='title'}YourApp — Placeholder Homepage{/block}
+{block name='title'}{$app_name} — Placeholder Homepage{/block}
 
 {block name='content'}
 

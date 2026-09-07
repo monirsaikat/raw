@@ -1,5 +1,8 @@
+Options -Indexes
+
 RewriteEngine On
 
+# Route everything that is not a real file or directory through index.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
@@ -14,3 +17,20 @@ RewriteRule ^ index.php [QSA,L]
         Deny from all
     </IfModule>
 </FilesMatch>
+
+# Compress text responses
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+# Static assets are versioned by asset() (?v=mtime), so browsers may cache
+# them for a year and still pick up changes immediately.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2)$">
+        ExpiresDefault "access plus 1 year"
+        <IfModule mod_headers.c>
+            Header set Cache-Control "public, max-age=31536000, immutable"
+        </IfModule>
+    </FilesMatch>
+</IfModule>

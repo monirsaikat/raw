@@ -4,8 +4,8 @@ class UserController
 {
     public function show($id)
     {
-        return view('views/user', [
-            'id' => $id
+        return view('user', [
+            'user' => User::findOrFail($id),
         ]);
     }
 }

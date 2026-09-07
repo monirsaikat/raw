@@ -1,24 +1,47 @@
 <?php
 
-function load_env(string $path)
+// Loads KEY=value pairs from a .env file into $_ENV / putenv(). Variables
+// already present in the real environment win over the file. Supports `#`
+// comments, `export KEY=value`, and single- or double-quoted values.
+
+function load_env(string $path, bool $overwrite = false): void
 {
-    if (!is_file($path)) {
+    if (!is_file($path) || !is_readable($path)) {
         return;
     }
 
     foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         $line = trim($line);
 
-        if ($line === '' || str_starts_with($line, '#')) {
+        if ($line === '' || $line[0] === '#') {
             continue;
         }
 
-        [$key, $value] = array_pad(explode('=', $line, 2), 2, '');
+        if (str_starts_with($line, 'export ')) {
+            $line = trim(substr($line, 7));
+        }
+
+        if (!str_contains($line, '=')) {
+            continue;
+        }
+
+        [$key, $value] = explode('=', $line, 2);
 
         $key = trim($key);
-        $value = trim(trim($value), "\"'");
+        $value = trim($value);
 
-        if ($key === '' || array_key_exists($key, $_ENV)) {
+        if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $key)) {
+            continue;
+        }
+
+        if (strlen($value) >= 2 && ($value[0] === '"' || $value[0] === "'") && str_ends_with($value, $value[0])) {
+            $value = substr($value, 1, -1);
+        } else {
+            // Strip a trailing inline comment: KEY=value # note
+            $value = preg_replace('/\s+#.*$/', '', $value);
+        }
+
+        if (!$overwrite && (array_key_exists($key, $_ENV) || getenv($key) !== false)) {
             continue;
         }
 
@@ -35,10 +58,11 @@ function env(string $key, $default = null)
         return $default;
     }
 
-    return match (strtolower($value)) {
-        'true' => true,
-        'false' => false,
-        'null' => null,
+    return match (strtolower((string) $value)) {
+        'true', '(true)' => true,
+        'false', '(false)' => false,
+        'null', '(null)' => null,
+        'empty', '(empty)' => '',
         default => $value,
     };
 }

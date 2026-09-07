@@ -1,11 +1,10 @@
 <?php
 
-
 class HomeController
 {
     public function index()
     {
-        return view('views/home', [
+        return view('home', [
             'items' => [
                 ['rank' => 1, 'initial' => 'A', 'title' => 'Item One', 'description' => 'Placeholder description for the first item in the list.', 'meta' => '$120'],
                 ['rank' => 2, 'initial' => 'B', 'title' => 'Item Two', 'description' => 'Placeholder description for the second item in the list.', 'meta' => '$98'],
@@ -17,6 +16,6 @@ class HomeController
 
     public function about()
     {
-        return view('views/about');
+        return view('about');
     }
 }

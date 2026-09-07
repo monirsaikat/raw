@@ -1,6 +1,6 @@
 {extends file='layouts/main.tpl'}
 
-{block name='title'}My Account — YourApp{/block}
+{block name='title'}My Account — {$app_name}{/block}
 
 {block name='content'}
 
