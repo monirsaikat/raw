@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Routing · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Routing</h1>
+            <p class="lead">Routes live in <code>routes/web.php</code>. Static paths match with an array lookup, dynamic paths with regexes compiled once, and the whole table can be cached for production.</p>
+
+            <h2>Defining routes</h2>
+<pre><code class="language-php">get('/', 'HomeController@index', 'home');
+get('/about', 'HomeController@about', 'about');
+post('/contact', 'ContactController@store', 'contact.store', ['throttle:10,1']);
+put('/posts/{id}', 'PostController@update', 'posts.update');
+patch('/posts/{id}', 'PostController@update');
+delete('/posts/{id}', 'PostController@destroy', 'posts.destroy');
+any('/webhook', 'WebhookController@handle');                      // GET, POST, PUT, PATCH, DELETE
+route_map(['GET', 'POST'], '/search', 'SearchController@index');</code></pre>
+            <p>Every function takes the path, the action, an optional route name and an optional list of middleware. The name is what <code>route_url()</code>, <code>redirect_route()</code> and <code>{navigate}</code> use, so name anything you link to.</p>
+
+            <h2>Actions</h2>
+            <ul>
+                <li><code>'PostController@show'</code>: a class in <code>controllers/</code> and a method.</li>
+                <li><code>'ReportController'</code>: an invokable class (<code>__invoke</code>).</li>
+                <li><code>[PostController::class, 'show']</code>: a class and method pair.</li>
+                <li>A closure. Convenient, but closures cannot be cached by <code>route:cache</code>.</li>
+            </ul>
+            <p>Controllers are built by the <a href="container.html">container</a>, so constructor dependencies are injected. See <a href="controllers.html">Controllers</a> for how parameters reach the method.</p>
+
+            <h2>Parameters</h2>
+<pre><code class="language-php">get('/user/{id}', 'UserController@show');            // any segment
+get('/user/{id:\d+}', 'UserController@show');        // regex constraint
+get('/docs/{page?}', 'DocsController@show');         // optional, must be the last segment
+get('/files/{path:.+}', 'FileController@show');      // may contain slashes</code></pre>
+            <p>Values are URL-decoded and passed to the action in order. An absent optional segment is <code>null</code>, unless the method parameter declares a default. Inside middleware or anywhere else, <code>route_parameter('id')</code> and <code>route_parameters()</code> read the matched values by name.</p>
+
+            <h2>Groups</h2>
+<pre><code class="language-php">group(['prefix' => '/admin', 'middleware' => ['auth', 'can:admin'], 'name' => 'admin.'], function () {
+    get('/', 'AdminController@dashboard', 'dashboard');          // /admin, name admin.dashboard
+    get('/users', 'AdminController@users', 'users');             // /admin/users, name admin.users
+
+    group(['prefix' => 'reports'], function () {
+        get('/daily', 'ReportController@daily', 'reports.daily'); // /admin/reports/daily
+    });
+});</code></pre>
+            <p>Prefixes, middleware and name prefixes accumulate through nested groups.</p>
+
+            <h2>Middleware on routes</h2>
+<pre><code class="language-php">get('/account', 'AuthController@account', 'account', ['auth']);
+post('/login', 'AuthController@login', 'login.store', ['guest', 'throttle:5,1']);
+get('/posts/{id}/edit', 'PostController@edit', 'posts.edit', ['auth', 'can:update,Post@id']);</code></pre>
+            <p>The global middleware (<code>csrf</code> by default) runs first, then the route's list in order. See <a href="middleware.html">Middleware</a>.</p>
+
+            <h2>Generating URLs</h2>
+<pre><code class="language-php">route_url('home');                                        // "/"  (or "/saikat/test1/" under a sub-directory)
+route_url('user', ['id' => 5]);                            // "/user/5"
+route_url('user', ['id' => 5, 'tab' => 'posts']);          // "/user/5?tab=posts"  (leftovers become the query string)
+url('about');                                              // "/about"
+app_url();                                                 // "http://localhost/saikat/test1"
+redirect_route('posts.show', ['id' => $post->id]);</code></pre>
+            <p>Missing required parameters or unknown names throw a <code>RuntimeException</code>, which surfaces mistakes immediately. In templates use the Smarty tags; their output is escaped for attributes:</p>
+<pre><code class="language-smarty">&lt;a href="{navigate name='user' id=$user.id}">{$user.name}&lt;/a>
+&lt;a href="{url path='about'}">About&lt;/a>
+&lt;link rel="stylesheet" href="{asset path='assets/css/app.css'}"></code></pre>
+
+            <h2>The current route</h2>
+<pre><code class="language-php">current_route_name();          // "admin.users"
+route_is('admin.*');           // true for any admin route
+route_is('home', 'about');     // any of the given patterns</code></pre>
+<pre><code class="language-smarty">&lt;a class="nav-link{if 'home'|route_is} active{/if}" href="{navigate name='home'}">Home&lt;/a></code></pre>
+
+            <h2>HEAD, 404 and 405</h2>
+            <p>A HEAD request matches the GET route. An unknown path answers 404. A path that exists only for other methods answers 405 with an <code>Allow</code> header listing them. Both are thrown as <code>HttpException</code> and rendered by the error handler as HTML or JSON depending on the client.</p>
+
+            <h2>Trailing slashes and the base path</h2>
+            <p><code>/about/</code> and <code>/about</code> are the same route. The base path (the sub-directory the app is installed in) is stripped before matching and prepended when generating URLs, so routes are always written from the application root.</p>
+
+            <h2>Caching</h2>
+<pre><code class="language-bash">php console.php route:list      # print the table
+php console.php route:cache     # write bootstrap/cache/routes.php
+php console.php route:clear</code></pre>
+            <p>The cache is used whenever <code>APP_DEBUG</code> is off and the file exists. Regenerate it after every deployment that changes routes. Closure actions cannot be serialised; the command refuses to cache them.</p>
+
+            <h2>Reference</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Function</th><th>Purpose</th></tr>
+                <tr><td><code>get / post / put / patch / delete / any</code></td><td>Register a route for one verb (or all five).</td></tr>
+                <tr><td><code>route_map(array $methods, $path, $action, $name, $middleware)</code></td><td>Register for a custom set of verbs.</td></tr>
+                <tr><td><code>group(array $attributes, callable $callback)</code></td><td><code>prefix</code>, <code>middleware</code>, <code>name</code> applied to routes defined inside.</td></tr>
+                <tr><td><code>route_url($name, $params)</code></td><td>Path for a named route, base path included.</td></tr>
+                <tr><td><code>url($path)</code>, <code>app_url()</code></td><td>Base-path-aware relative URL; absolute root URL.</td></tr>
+                <tr><td><code>current_route()</code>, <code>current_route_name()</code>, <code>route_is(...)</code></td><td>Inspect the matched route.</td></tr>
+                <tr><td><code>route_parameter($name)</code>, <code>route_parameters()</code></td><td>Matched parameter values by name.</td></tr>
+                <tr><td><code>dispatch($method, $path)</code></td><td>Run the pipeline for a method and path and return the action's result (used by tests).</td></tr>
+            </table>
+            </div>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

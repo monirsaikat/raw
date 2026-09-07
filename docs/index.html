@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <div class="hero">
+                <h1>YourApp Framework</h1>
+                <p class="lead">A dependency-free PHP 8.3 framework: procedural helpers where that reads best, classes where state matters. Smarty 5 templates, PDO on MySQL/MariaDB or SQLite, Bootstrap self-hosted. No Composer, no CDNs, nothing to install beyond PHP.</p>
+            </div>
+
+            <h2>Start here</h2>
+            <div class="cards">
+                <a class="card" href="getting-started.html"><strong>Getting started</strong><span>Install, configure <code>.env</code>, build a first page and a first model.</span></a>
+                <a class="card" href="structure.html"><strong>Structure and lifecycle</strong><span>Where things live and how a request flows through the code.</span></a>
+                <a class="card" href="routing.html"><strong>Routing</strong><span>Routes, parameters, groups, names and URL generation.</span></a>
+                <a class="card" href="models.html"><strong>Models</strong><span>The active-record layer: relationships, casts, events, scopes.</span></a>
+            </div>
+
+            <h2>What you get</h2>
+            <ul>
+                <li><strong>HTTP:</strong> a router with constraints, groups and caching; controllers with dependency injection and route model binding; validation with thirty-five rules; Smarty views that escape by default.</li>
+                <li><strong>Data:</strong> named connections, a query builder with sub-queries and unions, collections, pagination, an ORM with four relationship types and eager loading, a schema builder, migrations, factories and seeders.</li>
+                <li><strong>Services:</strong> sessions, flash messages, a file cache, rate limiting, authentication with remember-me, policies and gates, a dependency injection container, structured logging and a debug page.</li>
+                <li><strong>Tooling:</strong> a console with generators and database commands, and a test runner with an in-process HTTP client that exercises the real application against in-memory SQLite.</li>
+            </ul>
+
+            <h2>Design in one paragraph</h2>
+            <p>Every request enters through <code>index.php</code>, which loads <code>core/bootstrap.php</code>. Bootstrap reads <code>.env</code> and <code>config/</code>, installs the error handlers, loads the core modules and your middleware, then <code>route()</code> matches the request, runs the middleware chain and calls the action through the container. Whatever the action returns (a string from <code>view()</code>, an array, a model, or a <code>Response</code>) is sent. Anything thrown is caught by the exception handler and turned into an error page, a redirect back with validation errors, or a JSON payload, depending on the client.</p>
+
+            <h2>All pages</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Basics</th><td><a href="getting-started.html">Getting started</a> · <a href="structure.html">Structure</a> · <a href="configuration.html">Configuration</a></td></tr>
+                <tr><th>HTTP</th><td><a href="routing.html">Routing</a> · <a href="controllers.html">Controllers</a> · <a href="requests-responses.html">Requests and responses</a> · <a href="validation.html">Validation</a> · <a href="views.html">Views</a> · <a href="middleware.html">Middleware</a></td></tr>
+                <tr><th>Data</th><td><a href="database.html">Database and queries</a> · <a href="models.html">Models</a> · <a href="migrations.html">Migrations and seeding</a></td></tr>
+                <tr><th>Services</th><td><a href="authentication.html">Authentication</a> · <a href="authorization.html">Authorization</a> · <a href="container.html">Container</a> · <a href="sessions-cache.html">Sessions, flash and cache</a> · <a href="errors-logging.html">Errors and logging</a> · <a href="security.html">Security</a></td></tr>
+                <tr><th>Tooling</th><td><a href="console.html">Console</a> · <a href="testing.html">Testing</a> · <a href="deployment.html">Deployment</a> · <a href="helpers.html">Helpers reference</a></td></tr>
+            </table>
+            </div>
+
+            <h2>Conventions in these docs</h2>
+            <ul>
+                <li>Paths are relative to the project root.</li>
+                <li><code>console migrate</code> means <code>php console.php migrate</code>.</li>
+                <li>Examples use the <code>User</code> model that ships with the app.</li>
+            </ul>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

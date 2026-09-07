@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structure and lifecycle · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Structure and lifecycle</h1>
+            <p class="lead">Where files live, what bootstrap loads, and what happens between a request arriving and a response leaving.</p>
+
+            <h2>Directory layout</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Path</th><th>Purpose</th></tr>
+                <tr><td><code>index.php</code>, <code>console.php</code></td><td>Web and CLI entry points. Both load <code>core/bootstrap.php</code>.</td></tr>
+                <tr><td><code>core/</code></td><td>The framework. Lower-case files define functions (<code>route.php</code>, <code>http.php</code>, <code>auth.php</code>…); capitalised files are classes (<code>Model</code>, <code>QueryBuilder</code>, <code>Schema</code>, <code>Container</code>…). Application code never needs to edit this directory.</td></tr>
+                <tr><td><code>config/</code></td><td>Plain PHP arrays read with <code>config('app.name')</code>. Values come from <code>.env</code> through <code>env()</code>.</td></tr>
+                <tr><td><code>routes/web.php</code></td><td>Route definitions.</td></tr>
+                <tr><td><code>controllers/</code>, <code>models/</code>, <code>services/</code>, <code>policies/</code></td><td>Autoloaded application classes, one class per file, file name equal to the class name.</td></tr>
+                <tr><td><code>middleware/</code></td><td>Application middleware, one file per handler, loaded automatically.</td></tr>
+                <tr><td><code>views/</code></td><td>Smarty templates: <code>layouts/</code>, <code>includes/</code>, <code>errors/</code>, and pages.</td></tr>
+                <tr><td><code>database/</code></td><td><code>migrations/</code>, <code>seeders/</code>, <code>factories/</code>.</td></tr>
+                <tr><td><code>helpers/helpers.php</code></td><td>General-purpose helpers for application code (<code>view()</code>, <code>asset()</code>, <code>collect()</code>, <code>fake()</code>…).</td></tr>
+                <tr><td><code>assets/</code></td><td>Public CSS, JavaScript and images. Served directly by Apache, versioned by <code>asset()</code>.</td></tr>
+                <tr><td><code>storage/</code></td><td>Logs, cache files, compiled templates, SQLite files. Git-ignored and web-blocked; must be writable.</td></tr>
+                <tr><td><code>bootstrap/cache/</code></td><td>The compiled route table from <code>console route:cache</code>.</td></tr>
+                <tr><td><code>tests/</code></td><td>Test files run by <code>console test</code>.</td></tr>
+                <tr><td><code>libs/</code></td><td>Vendored third-party code (Smarty).</td></tr>
+                <tr><td><code>docs/</code></td><td>This documentation.</td></tr>
+            </table>
+            </div>
+            <p>Every directory that must not be reachable from the browser carries a <code>.htaccess</code> that denies access. The root <code>.htaccess</code> also blocks dotfiles such as <code>.env</code>.</p>
+
+            <h2>Bootstrap</h2>
+            <p><code>core/bootstrap.php</code> runs once per process, in this order:</p>
+            <ol>
+                <li>Defines <code>BASE_PATH</code> and <code>APP_START</code>.</li>
+                <li>Loads <code>.env</code> and the config reader, defines <code>APP_DEBUG</code>, sets the timezone.</li>
+                <li>Registers the autoloader for <code>core/</code>, <code>controllers/</code>, <code>models/</code>, <code>services/</code> and <code>policies/</code>.</li>
+                <li>Installs the error handlers: warnings become exceptions, uncaught exceptions are rendered.</li>
+                <li>Loads the core modules (container, HTTP helpers, session, flash, cache, middleware, routing, security headers, CSRF, validation, auth, authorization, throttling) and <code>helpers/helpers.php</code>.</li>
+                <li>Registers the container bindings from <code>config/container.php</code> and the authorization gate.</li>
+                <li>Includes every file in <code>middleware/</code>.</li>
+            </ol>
+            <p>Including bootstrap a second time is a no-op, so tests and scripts can require it freely.</p>
+
+            <h2>Request lifecycle</h2>
+            <ol>
+                <li>Apache rewrites the URL to <code>index.php</code> unless it names a real file (assets are served directly). The built-in server does the same through a check at the top of <code>index.php</code>.</li>
+                <li><code>index.php</code> loads bootstrap, then the route table: the compiled cache when <code>APP_DEBUG</code> is off and the cache exists, otherwise <code>routes/web.php</code>.</li>
+                <li><code>route()</code> starts output buffering, sends the security headers, and calls <code>dispatch()</code> with the request method (honouring <code>_method</code> spoofing) and the path relative to the base path.</li>
+                <li><code>dispatch()</code> finds the route: an O(1) lookup for static paths, then the pre-compiled regexes for dynamic ones. No match gives a 404, or a 405 with an <code>Allow</code> header when the path exists for other methods.</li>
+                <li>The global middleware (<code>csrf</code>) and the route's middleware run as an onion around the action.</li>
+                <li>The action is built and called through the container: constructor dependencies are injected, route parameters are mapped by position, parameters typed with a model class are loaded by key.</li>
+                <li>The return value is sent: a <code>Response</code> as is, an array or model or collection as JSON, a string as HTML.</li>
+                <li>Anything thrown reaches <code>handle_exception()</code>, which logs 5xx errors and renders the debug page, a JSON payload or <code>views/errors/error.tpl</code>. A <code>ValidationException</code> becomes a redirect back with the errors and old input flashed.</li>
+            </ol>
+
+            <h2>Sessions start lazily</h2>
+            <p>No session is opened until the first <code>session_*()</code>, <code>flash()</code>, <code>csrf_token()</code> or <code>auth_*()</code> call. A JSON endpoint that touches none of them costs no session lock. Rendering a view starts one, because the layout reads the logged-in user and the CSRF token.</p>
+
+            <h2>Coding conventions</h2>
+            <ul>
+                <li>Helpers are snake_case functions; classes use PascalCase and live in files named after them.</li>
+                <li>Controllers are plain classes with public methods; they return values rather than echoing.</li>
+                <li>Everything that reaches the browser goes through <code>send_response()</code>; do not call <code>header()</code> or <code>exit</code> yourself.</li>
+                <li>Request data is read with <code>input()</code>, never <code>$_REQUEST</code> (which would include cookies).</li>
+            </ul>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

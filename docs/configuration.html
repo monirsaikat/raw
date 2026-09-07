@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Configuration</h1>
+            <p class="lead">Environment variables in <code>.env</code> feed plain PHP arrays in <code>config/</code>, read anywhere with <code>config()</code>.</p>
+
+            <h2>The .env file</h2>
+            <p><code>.env</code> is loaded by <code>load_env()</code> at bootstrap. Real environment variables win over the file, so a server can override any value without editing it. The file is never committed; <code>.env.example</code> documents every key.</p>
+<pre><code class="language-ini">APP_NAME=YourApp
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=
+APP_BASE_PATH=
+APP_TIMEZONE=UTC
+APP_KEY=base64:...        # console key:generate
+LOG_LEVEL=debug
+
+SESSION_NAME=app_session
+SESSION_LIFETIME=120
+SESSION_SECURE_COOKIE=false
+HSTS_ENABLED=false
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=myapp
+DB_USERNAME=root
+DB_PASSWORD=
+DB_CHARSET=utf8mb4</code></pre>
+            <p>Syntax: <code>KEY=value</code>, <code>#</code> comments, <code>export KEY=value</code>, single or double quotes around values containing spaces or <code>#</code>. <code>env('KEY', $default)</code> converts <code>true</code>, <code>false</code>, <code>null</code> and <code>empty</code> to the PHP values.</p>
+
+            <h2>Config files</h2>
+            <p>Each file in <code>config/</code> returns an array. <code>config('file.key.subkey', $default)</code> loads the file once and walks the dots; <code>config_set()</code> overrides a value for the rest of the request (useful in tests).</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>File</th><th>Contents</th></tr>
+                <tr><td><code>app.php</code></td><td><code>name</code>, <code>env</code>, <code>debug</code>, <code>url</code>, <code>base_path</code>, <code>timezone</code>, <code>key</code>, <code>log_level</code>, <code>asset_versioning</code></td></tr>
+                <tr><td><code>auth.php</code></td><td>User model, username column, session key, login and home route names, policies, remember-me cookie</td></tr>
+                <tr><td><code>container.php</code></td><td>Dependency injection <code>bindings</code>, <code>singletons</code>, <code>aliases</code></td></tr>
+                <tr><td><code>database.php</code></td><td><code>default</code> connection, <code>connections</code> (<code>mysql</code>, <code>sqlite</code>, <code>testing</code>), <code>log_queries</code>, <code>slow_query_ms</code></td></tr>
+                <tr><td><code>security.php</code></td><td>Response headers, Content-Security-Policy directives, HSTS switch</td></tr>
+                <tr><td><code>session.php</code></td><td>Cookie name, idle lifetime in minutes, path, domain, secure flag, SameSite</td></tr>
+                <tr><td><code>view.php</code></td><td>Template and compile directories, escaping, compile checks, Smarty functions and modifiers</td></tr>
+            </table>
+            </div>
+
+            <h2>Reading configuration</h2>
+<pre><code class="language-php">config('app.name');                          // "YourApp"
+config('database.connections.mysql.host');   // "127.0.0.1"
+config('mail.from', 'noreply@example.com');  // default when the key or file is missing
+config_set('app.name', 'Renamed');           // for this request only
+
+Config::has('app.key');                      // true when defined, even if null</code></pre>
+
+            <h2>Key settings explained</h2>
+            <h3>APP_DEBUG</h3>
+            <p>Shows exception pages with code excerpts and stack traces, keeps a query log for the debug page, re-compiles templates when they change, and reads <code>routes/web.php</code> on every request instead of the route cache. Never enable it in production: it reveals file paths and internal messages.</p>
+
+            <h3>APP_URL and APP_BASE_PATH</h3>
+            <p>Both are optional. The base path (for example <code>/saikat/test1</code> when the app lives in a sub-directory) is derived from <code>SCRIPT_NAME</code>; set <code>APP_BASE_PATH</code> only when a proxy hides it. <code>app_url()</code> uses <code>APP_URL</code> when set, otherwise the request's scheme and host.</p>
+
+            <h3>APP_KEY</h3>
+            <p>The secret used to sign remember-me tokens (an HMAC of the cookie token is stored in the database). Generate it with <code>console key:generate</code>.</p>
+
+            <h3>LOG_LEVEL</h3>
+            <p>The lowest level written to <code>storage/logs</code>: <code>debug</code>, <code>info</code>, <code>notice</code>, <code>warning</code>, <code>error</code>, <code>critical</code>.</p>
+
+            <h3>SESSION_LIFETIME</h3>
+            <p>Idle timeout in minutes; a session untouched for that long is discarded. The cookie itself lasts until the browser closes; persistent logins use remember-me instead.</p>
+
+            <h3>DB_CONNECTION</h3>
+            <p>Name of the default connection in <code>config/database.php</code>. Models and <code>Database::table()</code> use it unless told otherwise.</p>
+
+            <div class="note"><p>Config files are ordinary PHP, so a value may be a closure. That is how <code>config/container.php</code> declares factories for services.</p></div>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

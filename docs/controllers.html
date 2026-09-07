@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controllers · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Controllers</h1>
+            <p class="lead">Plain classes in <code>controllers/</code>. Methods receive injected dependencies and route parameters, and return whatever should be sent.</p>
+
+            <h2>A controller</h2>
+<pre><code class="language-bash">php console.php make:controller Post      # controllers/PostController.php</code></pre>
+<pre><code class="language-php">&lt;?php
+
+class PostController
+{
+    public function __construct(private PostRepository $posts)
+    {
+    }
+
+    public function index()
+    {
+        return view('posts/index', ['posts' => Post::latest()->paginate(20)]);
+    }
+
+    public function show(Post $post)
+    {
+        return view('posts/show', ['post' => $post->load('author', 'comments')]);
+    }
+
+    public function store()
+    {
+        $data = validated(input(), ['title' => 'required|max:150', 'body' => 'required']);
+
+        $post = auth_user()->posts()->create($data);
+
+        return redirect_route('posts.show', ['id' => $post->id]);
+    }
+
+    public function destroy(Post $post)
+    {
+        authorize('delete', $post);
+        $post->delete();
+
+        return redirect_route('posts.index');
+    }
+}</code></pre>
+            <p>Nothing needs to be extended. Constructor parameters are resolved by the <a href="container.html">container</a>; <code>PostRepository</code> above is any class you write in <code>services/</code>.</p>
+
+            <h2>How parameters are filled</h2>
+            <p>For each parameter of the action, in order:</p>
+            <ol>
+                <li>A parameter typed with a <strong>model class</strong> receives the record for the next route parameter: <code>Post::findOrFail($id)</code>. A missing record answers 404 before the method runs. Soft-deleted rows are not found.</li>
+                <li>A parameter typed with any other <strong>class</strong> is resolved from the container.</li>
+                <li>An <strong>untyped or scalar</strong> parameter takes the next route parameter. An absent optional segment leaves the parameter's default value in place.</li>
+            </ol>
+<pre><code class="language-php">get('/users/{user}/posts/{page?}', 'UserController@posts');
+
+public function posts(PostRepository $repository, User $user, int $page = 1)
+{
+    // $repository from the container, $user = User::findOrFail($routeParam), $page = 1 when absent
+}</code></pre>
+            <p>Parameter <em>names</em> do not have to match placeholder names; order does.</p>
+
+            <h2>Return values</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Return</th><th>Sent as</th></tr>
+                <tr><td><code>view('name', $data)</code> or any string</td><td>HTML body, status 200</td></tr>
+                <tr><td>array, <code>Model</code>, <code>Collection</code>, <code>Paginator</code></td><td>JSON with <code>Content-Type: application/json</code></td></tr>
+                <tr><td><code>Response</code> from <code>response()</code>, <code>json()</code>, <code>redirect()</code>, <code>redirect_route()</code>, <code>back()</code></td><td>As configured</td></tr>
+                <tr><td><code>null</code> (nothing)</td><td>Empty 200</td></tr>
+            </table>
+            </div>
+            <p>To stop with an error use <code>abort(404)</code>, <code>abort_unless($condition, 403)</code> or <code>authorize()</code>; the exception handler renders the response. See <a href="requests-responses.html">Requests and responses</a>.</p>
+
+            <h2>Reading input</h2>
+<pre><code class="language-php">$title = input('title');                 // trimmed string or null
+$page = (int) query('page', 1);          // query string only
+$data = input_only(['title', 'body']);
+$file = request_file('cover');           // ['name', 'tmp_name', 'size', 'type', 'error'] or null
+
+if (has_input('remember')) { ... }
+if (wants_json()) { return ['ok' => true]; }</code></pre>
+            <p>Prefer <code>validated()</code> for anything that ends up in the database; it returns only the fields you declared.</p>
+
+            <h2>Invokable controllers</h2>
+            <p>A class with a single <code>__invoke()</code> method can be routed by name alone:</p>
+<pre><code class="language-php">get('/report', 'ReportController');
+
+class ReportController
+{
+    public function __invoke(ReportBuilder $builder)
+    {
+        return $builder->render();
+    }
+}</code></pre>
+
+            <h2>Flash messages and redirects</h2>
+<pre><code class="language-php">flash('success', 'Saved.');                 // shown on the next page by views/includes/alerts.tpl
+return redirect_route('posts.index');
+
+return back();                              // to the previous page
+return back_with_errors(['email' => ['Unknown address']]);</code></pre>
+
+            <h2>Testing a controller</h2>
+<pre><code class="language-php">test('store creates a post', function () {
+    acting_as(User::factory()->create());
+
+    http_post('/posts', ['title' => 'Hello', 'body' => 'World'])
+        ->assertRedirect('/posts/1');
+
+    assert_database_has('posts', ['title' => 'Hello']);
+});</code></pre>
+            <p>See <a href="testing.html">Testing</a> for the HTTP client.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

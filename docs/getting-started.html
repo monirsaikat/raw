@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Getting started</h1>
+            <p class="lead">From a fresh checkout to a working page, a form and a database table in a few minutes.</p>
+
+            <h2>Requirements</h2>
+            <ul>
+                <li>PHP 8.3 with <code>pdo_mysql</code>. The test suite also wants <code>pdo_sqlite</code>; if the extension is installed but disabled, the test command loads it on demand.</li>
+                <li>MySQL or MariaDB for the application database. SQLite works as well.</li>
+                <li>Apache with <code>mod_rewrite</code>, or the built-in PHP server for development.</li>
+            </ul>
+            <p>Nothing is installed through Composer. Smarty lives in <code>libs/</code> and Bootstrap in <code>assets/vendor/</code>.</p>
+
+            <h2>Install</h2>
+<pre><code class="language-bash">cp .env.example .env
+php console.php key:generate     # signs remember-me tokens
+php console.php migrate          # creates the tables
+php console.php serve            # http://127.0.0.1:8000</code></pre>
+            <p>Edit <code>.env</code> first: set <code>APP_NAME</code>, the <code>DB_*</code> values and, while developing, <code>APP_DEBUG=true</code>. Under XAMPP the project also runs straight from <code>htdocs</code>, for example at <code>http://localhost/saikat/test1/</code>; the <code>.htaccess</code> file routes every request through <code>index.php</code> and the base path is detected automatically.</p>
+
+            <div class="note"><p><strong>Debug mode</strong> shows exception pages with code and stack traces and re-compiles templates whenever they change. Turn it off in production and run <code>console view:clear</code> after deploying template changes.</p></div>
+
+            <h2>Your first page</h2>
+            <p>Add a route in <code>routes/web.php</code>:</p>
+<pre><code class="language-php">get('/hello/{name}', 'HelloController@show', 'hello');</code></pre>
+            <p>Generate the controller with <code>console make:controller Hello</code> and edit <code>controllers/HelloController.php</code>:</p>
+<pre><code class="language-php">&lt;?php
+
+class HelloController
+{
+    public function show(string $name)
+    {
+        return view('hello', ['name' => $name]);
+    }
+}</code></pre>
+            <p>Create <code>views/hello.tpl</code>:</p>
+<pre><code class="language-smarty">{extends file='layouts/main.tpl'}
+
+{block name='title'}Hello — {$app_name}{/block}
+
+{block name='content'}
+    &lt;section class="container my-5">
+        &lt;h1>Hello, {$name}!&lt;/h1>
+        &lt;a href="{navigate name='home'}">Back home&lt;/a>
+    &lt;/section>
+{/block}</code></pre>
+            <p>Visit <code>/hello/Ann</code>. Output is HTML-escaped automatically, the layout provides the navigation, and <code>{navigate}</code> builds the URL from the route name.</p>
+
+            <h2>A model, a table and a form</h2>
+<pre><code class="language-bash">php console.php make:model Post -mf      # model + migration + factory</code></pre>
+            <p>Edit the generated file in <code>database/migrations/</code>:</p>
+<pre><code class="language-php">Schema::create('posts', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+    $table->string('title');
+    $table->text('body');
+    $table->timestamps();
+});</code></pre>
+            <p>Run <code>console migrate</code>, declare the relationship and the fillable columns, then write the store action:</p>
+<pre><code class="language-php">// models/Post.php
+class Post extends Model
+{
+    protected static string $table = 'posts';
+    protected static array $fillable = ['title', 'body'];
+
+    public function author(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+}
+
+// models/User.php
+public function posts(): HasMany
+{
+    return $this->hasMany(Post::class);
+}
+
+// controllers/PostController.php
+public function store()
+{
+    $data = validated(input(), [
+        'title' => 'required|max:150',
+        'body' => 'required',
+    ]);
+
+    auth_user()->posts()->create($data);
+    flash('success', 'Post published.');
+
+    return redirect_route('posts.index');
+}</code></pre>
+            <p>If validation fails the user is sent back to the form with <code>$errors</code> and <code>$old</code> available in the template. The route needs the <code>auth</code> middleware so <code>auth_user()</code> is never null:</p>
+<pre><code class="language-php">group(['middleware' => ['auth']], function () {
+    get('/posts', 'PostController@index', 'posts.index');
+    post('/posts', 'PostController@store', 'posts.store');
+});</code></pre>
+
+            <h2>Running the tests</h2>
+<pre><code class="language-bash">php console.php test               # everything
+php console.php test Router        # files whose name contains "Router"</code></pre>
+            <p>Database tests run on an in-memory SQLite database and never touch your MySQL data. See <a href="testing.html">Testing</a>.</p>
+
+            <h2>Where to go next</h2>
+            <ul>
+                <li><a href="structure.html">Structure and lifecycle</a> explains how a request flows through the code.</li>
+                <li><a href="routing.html">Routing</a> and <a href="controllers.html">Controllers</a> cover the everyday work.</li>
+                <li><a href="models.html">Models</a> is the largest page; skim it once, then use it as a reference.</li>
+            </ul>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>
