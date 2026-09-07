@@ -7,9 +7,17 @@
 $middlewareRegistry = [];
 $globalMiddleware = ['csrf'];
 
-function middleware(string $name, callable $handler): void
+// middleware('admin', fn (callable $next) => ...) or middleware('admin',
+// AdminMiddleware::class) — a class built by the container with a
+// handle(callable $next, ...$params) method.
+function middleware(string $name, callable|string $handler): void
 {
     global $middlewareRegistry;
+
+    if (is_string($handler) && !is_callable($handler) && class_exists($handler)) {
+        $class = $handler;
+        $handler = fn (callable $next, ...$params) => app($class)->handle($next, ...$params);
+    }
 
     $middlewareRegistry[$name] = $handler;
 }

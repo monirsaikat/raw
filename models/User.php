@@ -2,6 +2,8 @@
 
 class User extends Model
 {
+    use Authorizable;
+
     protected static string $table = 'users';
     protected static array $fillable = ['name', 'email', 'password'];
     protected static array $hidden = ['password', 'remember_token'];

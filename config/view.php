@@ -27,8 +27,11 @@ return [
         'csp_nonce' => 'csp_nonce',
     ],
 
-    // PHP functions exposed as Smarty modifiers: {if 'home'|route_is}
+    // PHP functions exposed as Smarty modifiers: {if 'home'|route_is},
+    // {if 'update'|can:$post}
     'modifiers' => [
         'route_is' => 'route_is',
+        'can' => 'can',
+        'cannot' => 'cannot',
     ],
 ];

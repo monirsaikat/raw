@@ -28,6 +28,7 @@ configuration; `.htaccess` routes everything through `index.php`.
 | `routes/web.php` | Route definitions |
 | `controllers/`, `models/`, `services/` | Autoloaded app classes |
 | `middleware/` | App middleware, one file per handler, loaded automatically |
+| `policies/` | Authorization: `<Model>Policy` classes and `gates.php` |
 | `views/` | Smarty templates: `layouts/`, `includes/`, `errors/`, pages |
 | `database/migrations/` | PHP (schema builder) or SQL migrations; `seeders/`, `factories/` |
 | `storage/` | Logs, cache, compiled templates, SQLite files (git-ignored, web-blocked) |
@@ -57,9 +58,19 @@ group(['prefix' => '/admin', 'middleware' => ['auth'], 'name' => 'admin.'], func
 ```
 
 Actions: `'Controller@method'`, an invokable class name, `[class, method]`, or a
-closure (not cacheable). Parameters arrive positionally. `any()` and
-`route_map(['GET', 'POST'], …)` register several methods. HEAD falls back to
-GET; a path that exists only for other methods gets a 405 with `Allow`.
+closure (not cacheable). Controllers are built by the container, so
+constructor and method parameters that are type-hinted with a class are
+injected; route parameters fill the remaining parameters in order. A
+parameter typed with a model receives the record (route model binding):
+
+```php
+get('/posts/{id}', 'PostController@show');
+public function show(PostRepository $repository, Post $post) { ... }   // Post::findOrFail($id), 404 if missing
+```
+
+`any()` and `route_map(['GET', 'POST'], …)` register several methods. HEAD
+falls back to GET; a path that exists only for other methods gets a 405 with
+`Allow`. `route_parameter('id')` reads a matched parameter anywhere.
 
 URLs: `route_url('user', ['id' => 5, 'tab' => 'posts'])` → `/user/5?tab=posts`,
 `url('about')`, `app_url()`. In templates: `{navigate name='user' id=$user.id}`,
@@ -334,6 +345,53 @@ etc.; `fake()->unique()->email()` never repeats; `fake()->seed(42)` makes runs
 reproducible. Seeders in `database/seeders/*.php` return a closure and run with
 `db:seed` (or `migrate --seed`).
 
+## Container
+
+`app()` is a dependency injection container with reflection-based
+auto-wiring. Anything with a resolvable constructor is built on demand;
+interfaces and shared services are declared in `config/container.php`.
+
+```php
+app()->bind(PaymentGateway::class, StripeGateway::class);             // fresh each time
+app()->singleton(Mailer::class, fn (Container $app) => new Mailer(config('mail')));
+app()->when(ReportController::class)->needs(Cache::class)->give(FileCache::class);
+app(ReportBuilder::class);                        // constructor dependencies resolved recursively
+app()->call([$service, 'run'], ['limit' => 10]);   // method injection, extra arguments by name or position
+```
+
+Controllers, class-based middleware (`middleware('admin', AdminMiddleware::class)`
+with a `handle(callable $next, ...$params)` method) and policies are all
+resolved through the container. `ContainerException` names the unresolvable
+parameter or the circular dependency.
+
+## Authorization
+
+Abilities are answered by a policy for the model class of the first argument
+(`policies/PostPolicy.php`, found by name, or listed in `config/auth.php`) or
+by a standalone definition in `policies/gates.php`.
+
+```php
+// policies/PostPolicy.php  (php console.php make:policy Post)
+class PostPolicy
+{
+    public function before(User $user, string $ability): ?bool { return $user->is_admin ? true : null; }
+    public function view(?User $user, Post $post): bool { return $post->published; }   // ?User admits guests
+    public function update(User $user, Post $post): bool { return $post->user_id === $user->id; }
+}
+
+// policies/gates.php
+gate_define('admin', fn (User $user) => (bool) $user->is_admin);
+gate_before(fn (?User $user) => $user?->is_superuser ? true : null);
+```
+
+Checks: `can('update', $post)`, `cannot()`, `can_any([...])`,
+`authorize('update', $post)` (throws a 403), `$user->can('update', $post)`,
+`gate()->forUser($other)->allows(...)`. In templates: `{if 'update'|can:$post}`.
+On routes: `['can:admin']`, `['can:update,Post@id']` (model from the route
+parameter), `['can:create,Post']` (class name). Policy constructors are
+injected by the container. A callback whose first parameter is not nullable
+is never called for guests; the ability is simply denied.
+
 ## Auth
 
 `auth_attempt($email, $password, $remember)` verifies in constant time, rehashes
@@ -394,7 +452,7 @@ stack trace (deliberately without argument values) and the query log.
 serve [host:port]        route:list  route:cache  route:clear
 migrate [--seed]  migrate:rollback [--step=N]  migrate:reset  migrate:fresh [--seed] [--force]  migrate:status
 db:seed [--class=]  db:show [connection]  db:table <name>
-make:controller  make:model [-m] [-f] [-c]  make:factory  make:middleware  make:migration [--create=|--table=|--sql]  make:seeder
+make:controller  make:model [-m] [-f] [-c]  make:factory  make:middleware  make:migration [--create=|--table=|--sql]  make:policy [--model=]  make:seeder
 view:clear  cache:clear  key:generate  test [filter]
 ```
 
@@ -402,12 +460,41 @@ view:clear  cache:clear  key:generate  test [filter]
 
 `tests/*.php` files call `test('name', fn () => …)` with `assert_same`,
 `assert_true`, `assert_contains`, `assert_throws`, `skip()`, and so on (see
-`core/testing.php`). State is reset between tests; `test_next_request()`
-simulates a request boundary so flash/session behaviour can be tested. Database
-tests run against an in-memory SQLite database; `php console.php test` loads
-the `pdo_sqlite` extension automatically when it is installed but not enabled.
-Without it those tests are skipped (set `DB_TEST_CONNECTION` to a throwaway
-connection to run them elsewhere).
+`core/testing.php`). `before_each()`/`after_each()` hooks run around every
+test in a file. State is reset between tests.
+
+The HTTP client runs requests in-process through the real middleware,
+controllers and views, and keeps the session between calls like a browser:
+
+```php
+before_each(function () {
+    use_test_database();        // in-memory SQLite with the app's migrations
+    http_use_app_routes();      // routes/web.php
+    Database::beginTransaction();
+});
+after_each(fn () => Database::rollBack());
+
+test('login works', function () {
+    $user = User::factory()->create(['email' => 'a@b.co']);
+    http_post('/login', ['email' => 'a@b.co', 'password' => 'password'])
+        ->assertRedirect('/account')->assertAuthenticated($user);
+    http_get('/account')->assertOk()->assertSee($user->name);
+    http_json('GET', '/api/ping')->assertJsonPath('user.email', 'a@b.co');
+});
+```
+
+`http_get/post/put/patch/delete/json()`, `http_follow()`, `acting_as($user)`;
+assertions include `assertStatus/Ok/NotFound/Forbidden`, `assertRedirect('/x')`,
+`assertRedirectToRoute()`, `assertSee()`, `assertJson()`, `assertJsonPath()`,
+`assertSessionHas()`, `assertSessionHasErrors()`, `assertValid()`,
+`assertAuthenticated()`, `assertGuest()`; plus `assert_database_has()`,
+`assert_database_missing()`, `assert_database_count()`. CSRF tokens are added
+automatically; pass `['_token' => 'x']` to test the failure. The response's
+`->exception` holds anything an action threw.
+
+`php console.php test` loads the `pdo_sqlite` extension automatically when it
+is installed but not enabled. Without it the database tests are skipped (set
+`DB_TEST_CONNECTION` to a throwaway connection to run them elsewhere).
 
 ## Production checklist
 

@@ -232,10 +232,22 @@ function dispatch(string $method, string $path)
     }
 
     $currentRoute = $match['route'];
+    $currentRoute['parameters'] = $match['params'];
     $params = array_values($match['params']);
     $chain = array_merge(global_middleware(), $match['route']['middleware'] ?? []);
 
     return run_middleware($chain, fn () => action($match['route']['action'], $params));
+}
+
+// Named parameters of the matched route: route_parameter('id').
+function route_parameters(): array
+{
+    return current_route()['parameters'] ?? [];
+}
+
+function route_parameter(string $name, $default = null)
+{
+    return route_parameters()[$name] ?? $default;
 }
 
 // Web entry point: security headers, dispatch, send. Output is buffered so
@@ -260,9 +272,14 @@ function route(): void
 }
 
 // Invokes 'Controller@method', an invokable controller class name, a
-// [class, method] pair, or a closure with the route parameters.
+// [class, method] pair, or a closure. Controllers are built by the
+// container, so constructor and method dependencies are injected; route
+// parameters fill the remaining parameters in order, and a parameter typed
+// with a Model class receives the model looked up by key (404 when missing).
 function action($action, array $params = [])
 {
+    $container = app();
+
     if (is_string($action) && str_contains($action, '@')) {
         [$controller, $method] = explode('@', $action, 2);
 
@@ -274,24 +291,53 @@ function action($action, array $params = [])
             throw new RuntimeException("Method [$method] not found on [$controller].");
         }
 
-        return (new $controller())->$method(...$params);
+        $callable = [$container->make($controller), $method];
+    } elseif (is_string($action) && class_exists($action) && method_exists($action, '__invoke')) {
+        $callable = [$container->make($action), '__invoke'];
+    } elseif (is_array($action) && count($action) === 2 && is_string($action[0])) {
+        $callable = [$container->make($action[0]), $action[1]];
+    } elseif (is_callable($action)) {
+        $callable = $action;
+    } else {
+        throw new RuntimeException('Invalid route action.');
     }
 
-    if (is_string($action) && class_exists($action) && method_exists($action, '__invoke')) {
-        return (new $action())(...$params);
+    [$callable, $reflection] = $container->reflect($callable);
+
+    return $container->call($callable, route_bindings($reflection, $params));
+}
+
+// Maps positional route parameters onto the action's parameters by name,
+// binding Model-typed parameters to records (route model binding).
+function route_bindings(ReflectionFunctionAbstract $function, array $params): array
+{
+    $bound = [];
+    $index = 0;
+
+    foreach ($function->getParameters() as $parameter) {
+        $type = $parameter->getType();
+        $class = $type instanceof ReflectionNamedType && !$type->isBuiltin() ? $type->getName() : null;
+
+        if ($class !== null && is_subclass_of($class, Model::class)) {
+            if (!array_key_exists($index, $params) || $params[$index] === null) {
+                $index++;
+
+                continue;
+            }
+
+            $value = $params[$index++];
+            $bound[$parameter->getName()] = $value instanceof Model ? $value : $class::findOrFail($value);
+        } elseif ($class === null && array_key_exists($index, $params)) {
+            $value = $params[$index++];
+
+            // An absent optional segment leaves the parameter's own default in place.
+            if ($value !== null || !$parameter->isDefaultValueAvailable()) {
+                $bound[$parameter->getName()] = $value;
+            }
+        }
     }
 
-    if (is_array($action) && count($action) === 2 && is_string($action[0])) {
-        [$controller, $method] = $action;
-
-        return (new $controller())->$method(...$params);
-    }
-
-    if (is_callable($action)) {
-        return $action(...$params);
-    }
-
-    throw new RuntimeException('Invalid route action.');
+    return $bound;
 }
 
 // Path prefix when the app lives in a sub-directory ("/saikat/test1").

@@ -111,9 +111,12 @@ function wants_json(): bool
 
 function request_body(): string
 {
-    static $body = null;
+    // Cached per request; the test client pre-fills it for fake requests.
+    if (!array_key_exists('__request_body', $GLOBALS)) {
+        $GLOBALS['__request_body'] = (string) file_get_contents('php://input');
+    }
 
-    return $body ??= (string) file_get_contents('php://input');
+    return (string) $GLOBALS['__request_body'];
 }
 
 function request_json(): array

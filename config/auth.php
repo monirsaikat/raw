@@ -14,6 +14,12 @@ return [
     'login_route' => 'login',
     'home_route' => 'home',
 
+    // Model class => policy class. A "<Model>Policy" class in policies/ is
+    // picked up automatically; list only the exceptions here.
+    'policies' => [
+        // 'Post' => 'PostPolicy',
+    ],
+
     // "Remember me" cookie. Requires a nullable `remember_token` column on
     // the users table (see the 2026_09_07 migration).
     'remember' => [

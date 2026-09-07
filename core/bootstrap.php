@@ -28,6 +28,7 @@ require_once __DIR__ . '/errors.php';
 
 register_error_handlers();
 
+require_once __DIR__ . '/di.php';
 require_once __DIR__ . '/http.php';
 require_once __DIR__ . '/session/session.php';
 require_once __DIR__ . '/flash.php';
@@ -38,8 +39,14 @@ require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/authorization.php';
 require_once __DIR__ . '/throttle.php';
 require_once BASE_PATH . '/helpers/helpers.php';
+
+// Container bindings (config/container.php) and the authorization gate
+// (config/auth.php policies + policies/gates.php).
+container_boot();
+gate_boot();
 
 // App-level middleware lives in middleware/*.php. Each file registers one or
 // more handlers with middleware('name', fn). Scaffold one with make:middleware.

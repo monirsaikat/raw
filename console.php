@@ -644,6 +644,66 @@ command('make:factory', 'Create a model factory [model name, e.g. Post]', functi
         PHP) ? 0 : 1;
 });
 
+command('make:policy', 'Create a policy class [name, e.g. PostPolicy] [--model=Post]', function (array $args) {
+    [$positional, $options] = parse_arguments($args);
+    $name = str_studly(trim((string) ($positional[0] ?? '')));
+
+    if ($name === '') {
+        error_line('Usage: php console.php make:policy PostPolicy --model=Post');
+
+        return 1;
+    }
+
+    if (!str_ends_with($name, 'Policy')) {
+        $name .= 'Policy';
+    }
+
+    $model = str_studly((string) ($options['model'] ?? substr($name, 0, -6)));
+    $variable = '$' . str_camel($model);
+
+    return write_stub(BASE_PATH . '/policies/' . $name . '.php', <<<PHP
+        <?php
+
+        // Answers can('view', $variable), can('update', $variable), authorize('delete', $variable), ...
+        // Found automatically for the $model model. Return true to allow, false to deny.
+
+        class $name
+        {
+            // Runs first for every ability; return true/false to decide, null to continue.
+            // public function before(User \$user, string \$ability): ?bool
+            // {
+            //     return \$user->is_admin ? true : null;
+            // }
+
+            public function viewAny(User \$user): bool
+            {
+                return true;
+            }
+
+            public function view(User \$user, $model $variable): bool
+            {
+                return true;
+            }
+
+            public function create(User \$user): bool
+            {
+                return true;
+            }
+
+            public function update(User \$user, $model $variable): bool
+            {
+                return {$variable}->user_id === \$user->id;
+            }
+
+            public function delete(User \$user, $model $variable): bool
+            {
+                return {$variable}->user_id === \$user->id;
+            }
+        }
+
+        PHP) ? 0 : 1;
+});
+
 command('make:middleware', 'Create a middleware file [name, e.g. admin]', function (array $args) {
     [$positional] = parse_arguments($args);
     $name = str_snake(trim((string) ($positional[0] ?? '')));

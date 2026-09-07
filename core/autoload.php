@@ -12,6 +12,7 @@ spl_autoload_register(function (string $class): void {
         BASE_PATH . '/controllers',
         BASE_PATH . '/models',
         BASE_PATH . '/services',
+        BASE_PATH . '/policies',
     ];
 
     foreach ($directories as $directory) {
