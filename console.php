@@ -1,6 +1,6 @@
 <?php
 
-// CLI entry point: php console.php <command> [arguments]
+// CLI entry point: php console.php <command> [arguments] [--option=value]
 // Run without arguments to list the available commands.
 
 if (PHP_SAPI !== 'cli') {
@@ -26,6 +26,40 @@ function line(string $text = ''): void
 function error_line(string $text): void
 {
     fwrite(STDERR, $text . PHP_EOL);
+}
+
+// "a b --key=value --flag -mf" → [['a', 'b'], ['key' => 'value', 'flag' => true, 'm' => true, 'f' => true]]
+function parse_arguments(array $args): array
+{
+    $positional = [];
+    $options = [];
+
+    foreach ($args as $arg) {
+        if (str_starts_with($arg, '--')) {
+            [$key, $value] = array_pad(explode('=', substr($arg, 2), 2), 2, true);
+            $options[$key] = $value;
+        } elseif (str_starts_with($arg, '-') && strlen($arg) > 1) {
+            foreach (str_split(substr($arg, 1)) as $flag) {
+                $options[$flag] = true;
+            }
+        } else {
+            $positional[] = $arg;
+        }
+    }
+
+    return [$positional, $options];
+}
+
+// Asks a yes/no question on an interactive terminal; false when not a TTY.
+function confirm(string $question): bool
+{
+    if (!stream_isatty(STDIN)) {
+        return false;
+    }
+
+    echo $question . ' [y/N] ';
+
+    return strtolower(trim((string) fgets(STDIN))) === 'y';
 }
 
 function relative_path(string $path): string
@@ -77,8 +111,40 @@ function print_table(array $headers, array $rows): void
     line(rtrim(sprintf($format, ...array_map(fn ($w) => str_repeat('-', $w), $widths))));
 
     foreach ($rows as $row) {
-        line(rtrim(sprintf($format, ...array_values($row))));
+        line(rtrim(sprintf($format, ...array_map(fn ($c) => (string) $c, array_values($row)))));
     }
+}
+
+function migrator(): Migrator
+{
+    return new Migrator(BASE_PATH . '/database/migrations');
+}
+
+function run_seeders(?string $only = null): int
+{
+    $files = glob(BASE_PATH . '/database/seeders/*.php') ?: [];
+
+    if ($only !== null) {
+        $files = array_filter($files, fn ($file) => strcasecmp(basename($file, '.php'), $only) === 0);
+    }
+
+    if ($files === []) {
+        line($only === null ? 'No seeders found.' : "Seeder [$only] not found.");
+
+        return $only === null ? 0 : 1;
+    }
+
+    foreach ($files as $file) {
+        $seeder = require $file;
+
+        if (is_callable($seeder)) {
+            $seeder();
+        }
+
+        line('Seeded: ' . basename($file, '.php'));
+    }
+
+    return 0;
 }
 
 // ------------------------------------------------------------------------
@@ -86,7 +152,7 @@ function print_table(array $headers, array $rows): void
 command('help', 'List the available commands', function () {
     global $commands;
 
-    line('Usage: php console.php <command> [arguments]');
+    line('Usage: php console.php <command> [arguments] [--option=value]');
     line();
 
     $width = max(array_map('strlen', array_keys($commands)));
@@ -99,7 +165,8 @@ command('help', 'List the available commands', function () {
 });
 
 command('serve', 'Start the development server [host:port, default 127.0.0.1:8000]', function (array $args) {
-    $host = $args[0] ?? '127.0.0.1:8000';
+    [$positional] = parse_arguments($args);
+    $host = $positional[0] ?? '127.0.0.1:8000';
 
     line("Serving on http://$host — press Ctrl+C to stop");
 
@@ -233,8 +300,11 @@ command('key:generate', 'Set a random APP_KEY in .env', function () {
     return 0;
 });
 
-command('migrate', 'Run pending database migrations', function () {
-    $ran = (new Migrator(BASE_PATH . '/database/migrations'))->run();
+// ----------------------------------------------------------------- database --
+
+command('migrate', 'Run pending migrations [--seed]', function (array $args) {
+    [, $options] = parse_arguments($args);
+    $ran = migrator()->run();
 
     if ($ran === []) {
         line('Nothing to migrate.');
@@ -244,11 +314,13 @@ command('migrate', 'Run pending database migrations', function () {
         line("Migrated: $name");
     }
 
-    return 0;
+    return isset($options['seed']) ? run_seeders() : 0;
 });
 
-command('migrate:rollback', 'Revert the last batch of migrations [steps, default 1]', function (array $args) {
-    $rolled = (new Migrator(BASE_PATH . '/database/migrations'))->rollback(max(1, (int) ($args[0] ?? 1)));
+command('migrate:rollback', 'Revert the last batch of migrations [--step=N]', function (array $args) {
+    [$positional, $options] = parse_arguments($args);
+    $steps = max(1, (int) ($options['step'] ?? $positional[0] ?? 1));
+    $rolled = migrator()->rollback($steps);
 
     if ($rolled === []) {
         line('Nothing to roll back.');
@@ -261,10 +333,46 @@ command('migrate:rollback', 'Revert the last batch of migrations [steps, default
     return 0;
 });
 
+command('migrate:reset', 'Revert every migration', function () {
+    $rolled = migrator()->reset();
+
+    if ($rolled === []) {
+        line('Nothing to roll back.');
+    }
+
+    foreach ($rolled as $name) {
+        line("Rolled back: $name");
+    }
+
+    return 0;
+});
+
+command('migrate:fresh', 'Drop ALL tables and re-run every migration [--seed] [--force]', function (array $args) {
+    [, $options] = parse_arguments($args);
+    $connection = Database::connection();
+    $database = (string) $connection->config('database');
+
+    if (!isset($options['force']) && !confirm("Drop every table in [$database] on connection [{$connection->name()}] and migrate from scratch?")) {
+        line('Aborted. Pass --force to skip the confirmation.');
+
+        return 1;
+    }
+
+    $ran = migrator()->fresh();
+
+    line('Dropped all tables.');
+
+    foreach ($ran as $name) {
+        line("Migrated: $name");
+    }
+
+    return isset($options['seed']) ? run_seeders() : 0;
+});
+
 command('migrate:status', 'Show which migrations have run', function () {
     $rows = [];
 
-    foreach ((new Migrator(BASE_PATH . '/database/migrations'))->status() as $row) {
+    foreach (migrator()->status() as $row) {
         $rows[] = [
             $row['batch'] === null ? 'Pending' : 'Ran',
             $row['migration'],
@@ -278,8 +386,65 @@ command('migrate:status', 'Show which migrations have run', function () {
     return 0;
 });
 
-command('make:migration', 'Create a migration file [name, e.g. create_posts_table]', function (array $args) {
-    $name = str_snake(trim((string) ($args[0] ?? '')));
+command('db:seed', 'Run seeders in database/seeders [--class=Name]', function (array $args) {
+    [, $options] = parse_arguments($args);
+
+    return run_seeders(isset($options['class']) ? (string) $options['class'] : null);
+});
+
+command('db:show', 'Show the connection and its tables with row counts', function (array $args) {
+    [$positional] = parse_arguments($args);
+    $name = $positional[0] ?? null;
+    $connection = Database::connection($name);
+
+    line('Connection: ' . $connection->name() . ' (' . $connection->driver() . ')');
+    line('Database:   ' . $connection->config('database'));
+    line();
+
+    $rows = [];
+
+    foreach (Schema::getTables($name) as $table) {
+        $rows[] = [$table, Database::table($table, $name)->count()];
+    }
+
+    print_table(['Table', 'Rows'], $rows);
+
+    return 0;
+});
+
+command('db:table', 'Describe a table [name] [connection]', function (array $args) {
+    [$positional] = parse_arguments($args);
+    $table = $positional[0] ?? '';
+    $name = $positional[1] ?? null;
+
+    if ($table === '' || !Schema::hasTable($table, $name)) {
+        error_line($table === '' ? 'Usage: php console.php db:table users' : "Table [$table] does not exist.");
+
+        return 1;
+    }
+
+    $rows = [];
+
+    foreach (Schema::getColumns($table, $name) as $column) {
+        $rows[] = [
+            $column['name'],
+            $column['type'],
+            $column['nullable'] ? 'yes' : 'no',
+            $column['default'] ?? '',
+            $column['auto_increment'] ? 'yes' : '',
+        ];
+    }
+
+    print_table(['Column', 'Type', 'Nullable', 'Default', 'Auto'], $rows);
+
+    return 0;
+});
+
+// --------------------------------------------------------------- generators --
+
+command('make:migration', 'Create a migration [name] [--create=table] [--table=table] [--sql]', function (array $args) {
+    [$positional, $options] = parse_arguments($args);
+    $name = str_snake(trim((string) ($positional[0] ?? '')));
 
     if ($name === '') {
         error_line('Usage: php console.php make:migration create_posts_table');
@@ -287,25 +452,89 @@ command('make:migration', 'Create a migration file [name, e.g. create_posts_tabl
         return 1;
     }
 
-    $table = preg_match('/^create_(.+)_table$/', $name, $m) ? $m[1] : 'table_name';
-    $file = BASE_PATH . '/database/migrations/' . date('Y_m_d_His') . '_' . $name . '.sql';
+    $create = isset($options['create']) ? (string) $options['create'] : null;
+    $alter = isset($options['table']) ? (string) $options['table'] : null;
 
-    return write_stub($file, <<<SQL
-        -- up
-        CREATE TABLE IF NOT EXISTS $table (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NULL
-        );
+    if ($create === null && $alter === null) {
+        if (preg_match('/^create_(.+)_table$/', $name, $m)) {
+            $create = $m[1];
+        } elseif (preg_match('/_(?:to|from|in|on)_(.+)_table$/', $name, $m)) {
+            $alter = $m[1];
+        } else {
+            $alter = 'table_name';
+        }
+    }
 
-        -- down
-        DROP TABLE IF EXISTS $table;
+    $stamp = date('Y_m_d_His');
 
-        SQL) ? 0 : 1;
+    if (isset($options['sql'])) {
+        $table = $create ?? $alter;
+
+        return write_stub(BASE_PATH . "/database/migrations/{$stamp}_{$name}.sql", <<<SQL
+            -- up
+            CREATE TABLE IF NOT EXISTS $table (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                created_at DATETIME NULL,
+                updated_at DATETIME NULL
+            );
+
+            -- down
+            DROP TABLE IF EXISTS $table;
+
+            SQL) ? 0 : 1;
+    }
+
+    if ($create !== null) {
+        $stub = <<<PHP
+            <?php
+
+            return new class extends Migration
+            {
+                public function up(): void
+                {
+                    Schema::create('$create', function (Blueprint \$table) {
+                        \$table->id();
+                        \$table->timestamps();
+                    });
+                }
+
+                public function down(): void
+                {
+                    Schema::dropIfExists('$create');
+                }
+            };
+
+            PHP;
+    } else {
+        $stub = <<<PHP
+            <?php
+
+            return new class extends Migration
+            {
+                public function up(): void
+                {
+                    Schema::table('$alter', function (Blueprint \$table) {
+                        // \$table->string('column')->nullable();
+                    });
+                }
+
+                public function down(): void
+                {
+                    Schema::table('$alter', function (Blueprint \$table) {
+                        // \$table->dropColumn('column');
+                    });
+                }
+            };
+
+            PHP;
+    }
+
+    return write_stub(BASE_PATH . "/database/migrations/{$stamp}_{$name}.php", $stub) ? 0 : 1;
 });
 
-command('make:controller', 'Create a controller class [name, e.g. Post or PostController]', function (array $args) {
-    $name = str_studly(trim((string) ($args[0] ?? '')));
+command('make:controller', 'Create a controller [name, e.g. Post or PostController]', function (array $args) {
+    [$positional] = parse_arguments($args);
+    $name = str_studly(trim((string) ($positional[0] ?? '')));
 
     if ($name === '') {
         error_line('Usage: php console.php make:controller PostController');
@@ -333,18 +562,21 @@ command('make:controller', 'Create a controller class [name, e.g. Post or PostCo
         PHP) ? 0 : 1;
 });
 
-command('make:model', 'Create a model class [name, e.g. Post]', function (array $args) {
-    $name = str_studly(trim((string) ($args[0] ?? '')));
+command('make:model', 'Create a model [name] [-m migration] [-f factory] [-c controller]', function (array $args) {
+    global $commands;
+
+    [$positional, $options] = parse_arguments($args);
+    $name = str_studly(trim((string) ($positional[0] ?? '')));
 
     if ($name === '') {
-        error_line('Usage: php console.php make:model Post');
+        error_line('Usage: php console.php make:model Post -mf');
 
         return 1;
     }
 
     $table = str_plural(str_snake($name));
 
-    return write_stub(BASE_PATH . '/models/' . $name . '.php', <<<PHP
+    $ok = write_stub(BASE_PATH . '/models/' . $name . '.php', <<<PHP
         <?php
 
         class $name extends Model
@@ -356,13 +588,65 @@ command('make:model', 'Create a model class [name, e.g. Post]', function (array 
 
             // Columns left out of toArray() / JSON output.
             protected static array \$hidden = [];
+
+            // Attribute casts: 'int', 'bool', 'float', 'array', 'datetime', 'date', ...
+            protected static array \$casts = [];
+        }
+
+        PHP);
+
+    if (isset($options['m']) || isset($options['migration'])) {
+        $commands['make:migration']['handler'](["create_{$table}_table"]);
+    }
+
+    if (isset($options['f']) || isset($options['factory'])) {
+        $commands['make:factory']['handler']([$name]);
+    }
+
+    if (isset($options['c']) || isset($options['controller'])) {
+        $commands['make:controller']['handler']([$name]);
+    }
+
+    return $ok ? 0 : 1;
+});
+
+command('make:factory', 'Create a model factory [model name, e.g. Post]', function (array $args) {
+    [$positional] = parse_arguments($args);
+    $model = str_studly(trim((string) ($positional[0] ?? '')));
+
+    if ($model === '') {
+        error_line('Usage: php console.php make:factory Post');
+
+        return 1;
+    }
+
+    if (str_ends_with($model, 'Factory')) {
+        $model = substr($model, 0, -7);
+    }
+
+    return write_stub(BASE_PATH . '/database/factories/' . $model . 'Factory.php', <<<PHP
+        <?php
+
+        // $model::factory()->count(5)->create();
+
+        class {$model}Factory extends Factory
+        {
+            protected string \$model = '$model';
+
+            public function definition(): array
+            {
+                return [
+                    // 'title' => fake()->sentence(),
+                ];
+            }
         }
 
         PHP) ? 0 : 1;
 });
 
 command('make:middleware', 'Create a middleware file [name, e.g. admin]', function (array $args) {
-    $name = str_snake(trim((string) ($args[0] ?? '')));
+    [$positional] = parse_arguments($args);
+    $name = str_snake(trim((string) ($positional[0] ?? '')));
 
     if ($name === '') {
         error_line('Usage: php console.php make:middleware admin');
@@ -387,7 +671,8 @@ command('make:middleware', 'Create a middleware file [name, e.g. admin]', functi
 });
 
 command('make:seeder', 'Create a database seeder [name, e.g. UserSeeder]', function (array $args) {
-    $name = str_studly(trim((string) ($args[0] ?? '')));
+    [$positional] = parse_arguments($args);
+    $name = str_studly(trim((string) ($positional[0] ?? '')));
 
     if ($name === '') {
         error_line('Usage: php console.php make:seeder UserSeeder');
@@ -398,41 +683,40 @@ command('make:seeder', 'Create a database seeder [name, e.g. UserSeeder]', funct
     return write_stub(BASE_PATH . '/database/seeders/' . $name . '.php', <<<PHP
         <?php
 
-        // Run with: php console.php db:seed
+        // Run with: php console.php db:seed --class=$name
 
         return function (): void {
-            // User::create(['name' => 'Admin', 'email' => 'admin@example.com', 'password' => User::hashPassword('secret')]);
+            // User::factory()->count(10)->create();
         };
 
         PHP) ? 0 : 1;
 });
 
-command('db:seed', 'Run every seeder in database/seeders', function () {
-    $files = glob(BASE_PATH . '/database/seeders/*.php') ?: [];
-
-    if ($files === []) {
-        line('No seeders found.');
-
-        return 0;
-    }
-
-    foreach ($files as $file) {
-        $seeder = require $file;
-
-        if (is_callable($seeder)) {
-            $seeder();
-        }
-
-        line('Seeded: ' . basename($file, '.php'));
-    }
-
-    return 0;
-});
-
 command('test', 'Run the test suite [optional filename filter]', function (array $args) {
+    // Database tests want an in-memory SQLite database. If the extension
+    // exists but is not loaded, re-run PHP with it enabled.
+    if (!in_array('sqlite', PDO::getAvailableDrivers(), true) && getenv('CONSOLE_REEXEC') === false) {
+        $extension = PHP_OS_FAMILY === 'Windows' ? 'php_pdo_sqlite.dll' : 'pdo_sqlite.so';
+        $directory = (string) (ini_get('extension_dir') ?: PHP_EXTENSION_DIR);
+
+        if (is_file(rtrim($directory, '/\\') . '/' . $extension)) {
+            putenv('CONSOLE_REEXEC=1');
+
+            passthru(sprintf(
+                '%s -d extension=pdo_sqlite %s test %s',
+                escapeshellarg(PHP_BINARY),
+                escapeshellarg(__FILE__),
+                implode(' ', array_map('escapeshellarg', $args))
+            ), $code);
+
+            return $code;
+        }
+    }
+
     require_once BASE_PATH . '/core/testing.php';
 
-    $filter = strtolower((string) ($args[0] ?? ''));
+    [$positional] = parse_arguments($args);
+    $filter = strtolower((string) ($positional[0] ?? ''));
     $files = array_values(array_filter(
         glob(BASE_PATH . '/tests/*.php') ?: [],
         fn ($file) => $filter === '' || str_contains(strtolower(basename($file)), $filter)

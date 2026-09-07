@@ -53,9 +53,9 @@ test('real environment variables win over the file unless overwriting', function
 });
 
 test('config reads dot paths with defaults and supports runtime overrides', function () {
-    assert_same('mysql', config('database.driver'));
+    assert_same('mysql', config('database.connections.mysql.driver'));
     assert_same('x', config('database.nope', 'x'));
-    assert_same('x', config('database.driver.deeper', 'x'), 'scalar cannot be descended');
+    assert_same('x', config('database.connections.mysql.driver.deeper', 'x'), 'scalar cannot be descended');
     assert_same([], config('no_such_file'));
 
     config_set('app.custom.deep', 1);

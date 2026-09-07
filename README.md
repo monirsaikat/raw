@@ -2,8 +2,8 @@
 
 A small, dependency-free PHP 8.3 framework: procedural helpers where that reads
 best, classes where state matters. Smarty 5 templates (vendored, no Composer),
-PDO on MySQL, Bootstrap self-hosted. Everything runs on XAMPP or the built-in
-PHP server.
+PDO on MySQL/MariaDB or SQLite, Bootstrap self-hosted. Everything runs on XAMPP
+or the built-in PHP server.
 
 ## Quick start
 
@@ -12,7 +12,7 @@ cp .env.example .env            # then fill in DB_* and APP_NAME
 php console.php key:generate    # signs remember-me tokens
 php console.php migrate
 php console.php serve           # http://127.0.0.1:8000
-php console.php test            # runs tests/*.php
+php console.php test            # runs tests/*.php (database tests use in-memory SQLite)
 ```
 
 On Apache the app also works from a sub-directory (`/saikat/test1/`) with no
@@ -23,14 +23,14 @@ configuration; `.htaccess` routes everything through `index.php`.
 | Path | Purpose |
 | --- | --- |
 | `index.php`, `console.php` | Web and CLI entry points; both load `core/bootstrap.php` |
-| `core/` | The framework. Function files (`route.php`, `http.php`, …) and classes (`Model`, `QueryBuilder`, `View`, …) |
+| `core/` | The framework. Function files (`route.php`, `http.php`, …) and classes (`Model`, `QueryBuilder`, `Schema`, …) |
 | `config/` | Plain PHP arrays read with `config('app.name')`; values come from `.env` via `env()` |
 | `routes/web.php` | Route definitions |
 | `controllers/`, `models/`, `services/` | Autoloaded app classes |
 | `middleware/` | App middleware, one file per handler, loaded automatically |
 | `views/` | Smarty templates: `layouts/`, `includes/`, `errors/`, pages |
-| `database/migrations/` | SQL files with `-- up` / `-- down` sections; `database/seeders/` |
-| `storage/` | Logs, cache, compiled templates (git-ignored, web-blocked) |
+| `database/migrations/` | PHP (schema builder) or SQL migrations; `seeders/`, `factories/` |
+| `storage/` | Logs, cache, compiled templates, SQLite files (git-ignored, web-blocked) |
 | `tests/` | Test files run by `php console.php test` |
 
 ## Request lifecycle
@@ -71,8 +71,8 @@ which is used whenever `APP_DEBUG` is off. `route:list` prints the table.
 
 ## Controllers and responses
 
-An action may return a string (HTML), an array or Model (sent as JSON), a
-`Response`, or nothing.
+An action may return a string (HTML), an array, Model, Collection or Paginator
+(sent as JSON), a `Response`, or nothing.
 
 ```php
 return view('contact');                        // views/contact.tpl
@@ -115,45 +115,224 @@ Rules use array syntax when a pattern contains `|`: `['required', 'regex:/a|b/']
 
 ## Database
 
-`Database::table('users')` returns a query builder; `Database::select($sql, $bindings)`
-and friends run raw prepared statements. `Database::transaction(fn () => …)`.
+### Connections
+
+`config/database.php` names connections (`mysql`, `sqlite`, `testing`) and the
+default (`DB_CONNECTION`). `Database::connection('sqlite')` returns a
+`Connection`; the static helpers use the default one.
 
 ```php
-Database::table('posts')->where('status', 'published')->whereIn('id', $ids)
-    ->orderByDesc('created_at')->paginate(20);
-Database::table('users')->where('id', 3)->update(['name' => 'X']);
+Database::select('SELECT * FROM users WHERE id = ?', [$id]);   // raw, bound
+Database::transaction(function () { ... }, attempts: 3);        // retries deadlocks
+Database::transaction(fn () => Database::transaction(fn () => ...)); // nested → savepoints
+Database::listen(fn ($sql, $bindings, $ms) => ...);              // every query
+Database::connection()->cursor($sql, $bindings);                 // streamed rows
 ```
 
-Identifiers are validated and quoted, operators whitelisted, values bound.
-`Database::raw('NOW()')` marks a trusted fragment. Query log (debug mode only)
-appears on the exception page.
+Bindings are typed (ints as ints, DateTime as strings, bools as 0/1). A failed
+statement throws `QueryException` with the SQL and bindings in its message.
+`DB_SLOW_QUERY_MS` logs slow queries; `APP_DEBUG` keeps a query log that the
+exception page shows.
+
+### Query builder
+
+`Database::table('users')` (or `Model::query()`) returns a `QueryBuilder`.
+Identifiers are validated and quoted, operators whitelisted, values bound —
+request data may be a value, never a column or operator.
+
+```php
+Database::table('posts')
+    ->select('posts.*', 'users.name as author')
+    ->join('users', 'users.id', '=', 'posts.user_id')
+    ->where('published', 1)->whereIn('category_id', $ids)
+    ->whereDate('created_at', '>=', now()->subDays(7))
+    ->whereHas(...)                          // models only, see below
+    ->orderByDesc('created_at')->paginate(20);
+
+Database::table('users')->where(fn ($q) => $q->where('a', 1)->orWhere('b', 2));
+Database::table('users')->whereExists(fn ($q) => $q->from('logins')->whereColumn('logins.user_id', 'users.id'));
+Database::table('users')->whereIn('id', fn ($q) => $q->from('admins')->select('user_id'));
+Database::table('orders')->selectRaw('customer_id, SUM(total) AS spent')->groupBy('customer_id')->having('spent', '>', 100)->get();
+Database::table('t')->when($search, fn ($q, $s) => $q->whereLike('name', "%$s%"));
+Database::table('t')->union($other)->lockForUpdate()->inRandomOrder();
+```
+
+Reading: `get()` (Collection), `first()`, `firstOrFail()`, `sole()`, `find()`,
+`findMany()`, `value()`, `pluck()`, `count()/sum()/avg()/min()/max()`,
+`exists()`, `chunk(200, fn)`, `chunkById()`, `each()`, `cursor()` (generator),
+`paginate()`, `simplePaginate()`, `toSql()`, `toRawSql()`, `dd()`.
+
+Writing: `insert()`, `insertGetId()`, `insertOrIgnore()`, `upsert($rows, 'email')`,
+`update()`, `updateOrInsert()`, `increment()`, `decrement()`, `delete()`,
+`truncate()`. `Database::raw('NOW()')` marks a trusted fragment.
+
+### Collections
+
+Queries return a `Collection`: `->map()`, `->filter()`, `->pluck('name', 'id')`,
+`->keyBy('id')`, `->groupBy('team.name')`, `->sortBy()`, `->where('age', '>', 18)`,
+`->sum('total')`, `->chunk()`, `->unique()`, `->first(fn)`, `->each()`,
+`->toArray()`, `->toJson()`, and about forty more. `collect([...])` builds one.
+Collections iterate in `{foreach}` and count with `count()`.
+
+### Pagination
+
+`paginate()` returns a `Paginator`: iterate it, read `->total()`, `->lastPage()`,
+`->nextPageUrl()`, append parameters with `->appends([...])`, and render
+Bootstrap 5 links with `{$posts->links()|raw}`. JSON output matches the usual
+`data / current_page / last_page / …` shape. `simplePaginate()` skips the COUNT.
 
 ### Models
 
 ```php
 class Post extends Model
 {
-    protected static string $table = 'posts';            // default: snake_case plural of class
-    protected static array $fillable = ['title', 'body'];
-    protected static array $hidden = ['secret'];
-    protected static bool $timestamps = true;              // created_at / updated_at
-}
+    use SoftDeletes;
 
-Post::find(1);  Post::findOrFail(1);  Post::all();
-Post::where('published', 1)->latest()->get();          // static calls forward to the builder
-$post = Post::create(['title' => 'Hi', 'body' => '…']);
-$post->update(['title' => 'Hello']);  $post->title;  $post['title'];  $post->delete();
+    protected static string $table = 'posts';              // default: snake_case plural of class
+    protected static array $fillable = ['title', 'body', 'meta', 'published_at'];
+    protected static array $hidden = ['secret'];           // left out of toArray()/JSON
+    protected static array $appends = ['excerpt'];         // accessors included in toArray()
+    protected static array $casts = ['meta' => 'array', 'published_at' => 'datetime', 'views' => 'int'];
+    protected static array $with = ['author'];             // always eager loaded
+
+    public function author(): BelongsTo { return $this->belongsTo(User::class); }      // user_id
+    public function comments(): HasMany { return $this->hasMany(Comment::class); }   // comments.post_id
+    public function tags(): BelongsToMany { return $this->belongsToMany(Tag::class)->withPivot('note')->withTimestamps(); }
+
+    public function getExcerptAttribute(): string { return str_limit($this->body, 80); }   // $post->excerpt
+    public function setTitleAttribute($value): void { $this->attributes['title'] = trim($value); }
+    public function scopePublished(QueryBuilder $q): void { $q->whereNotNull('published_at'); }  // Post::published()
+
+    protected static function boot(): void
+    {
+        static::creating(fn (Post $post) => $post->slug ??= str_slug($post->title));
+        static::addGlobalScope('recent', fn ($q) => $q->where('created_at', '>', '2020-01-01'));
+    }
+}
 ```
 
-Models are `ArrayAccess` and `JsonSerializable`, so `{$user.name}` works in
-templates and returning a model from an action sends JSON without `$hidden`.
+Reading and writing:
 
-### Migrations
+```php
+Post::find(1);  Post::findOrFail(1);  Post::all();  Post::published()->latest()->get();
+$post = Post::create([...]);  $post->update([...]);  $post->delete();  $post->refresh();
+Post::firstOrCreate(['slug' => $slug], [...]);  Post::updateOrCreate([...], [...]);
+Post::destroy([1, 2]);  $post->replicate();  $post->increment('views');
+$post->isDirty('title');  $post->getOriginal('title');  $post->wasChanged();
+$post->title;  $post['title'];  $post->published_at->diffForHumans();  $post->toArray();
+```
 
-`php console.php make:migration create_posts_table` creates a timestamped SQL
-file with `-- up` and `-- down` sections. `migrate` runs pending files in a
-batch, `migrate:rollback [steps]` reverts batches, `migrate:status` lists them.
-`db:seed` runs every `database/seeders/*.php` (each returns a closure).
+Casts: `int`, `float`, `decimal:2`, `string`, `bool`, `array`/`json`, `object`,
+`collection`, `date`, `datetime`, `timestamp`. Timestamp columns are
+`DateTimeValue` objects that print as `Y-m-d H:i:s` and offer
+`->addDays()`, `->diffForHumans()`, `->isPast()`, `->toDateString()`, …
+
+Relationships:
+
+```php
+$post->author;  $post->comments;  $post->tags;             // lazy, cached on the model
+$post->comments()->where('approved', 1)->get();          // relation as a query
+$post->comments()->create(['body' => '...']);            // sets post_id
+$comment->post()->associate($post);
+$post->tags()->attach([1, 2 => ['note' => 'x']]);  ->detach();  ->sync([1, 3]);  ->toggle([2]);
+$tag->pivot->note;
+
+Post::with('author', 'comments.user')->get();            // one query per relation, no N+1
+Post::with(['comments' => fn ($q) => $q->latest()])->get();
+$posts->load('tags');  $post->loadMissing('author');
+Post::has('comments')->get();  Post::has('comments', '>=', 3)->get();
+Post::whereHas('comments', fn ($q) => $q->where('approved', 1))->get();
+Post::doesntHave('tags')->get();  Post::withCount('comments')->get();   // ->comments_count
+```
+
+Events (`creating`, `created`, `updating`, `updated`, `saving`, `saved`,
+`deleting`, `deleted`, `restoring`, `restored`, `retrieved`):
+`Post::created(fn ($post) => ...)`, `Post::observe(PostObserver::class)`.
+Returning `false` from a `*ing` listener cancels the operation.
+`Model::withoutEvents(fn () => ...)`, `$post->saveQuietly()`.
+
+Soft deletes (`use SoftDeletes;`, table needs `softDeletes()`):
+`$post->delete()` stamps `deleted_at`; `Post::withTrashed()`,
+`Post::onlyTrashed()`, `$post->restore()`, `$post->forceDelete()`,
+`$post->trashed()`.
+
+Multiple connections: `protected static ?string $connection = 'sqlite';` or
+`Post::on('sqlite')->get()`.
+
+### Schema builder and migrations
+
+`php console.php make:migration create_posts_table` writes a PHP migration:
+
+```php
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('title', 150)->unique();
+            $table->text('body')->nullable();
+            $table->enum('status', ['draft', 'live'])->default('draft')->index();
+            $table->decimal('price', 10, 2)->default(0);
+            $table->json('meta')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index(['status', 'created_at']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('posts');
+    }
+};
+```
+
+`Schema::table('posts', fn (Blueprint $t) => $t->string('slug')->nullable()->after('title'))`,
+`$t->dropColumn()`, `$t->renameColumn()`, `$t->dropIndex([...])`, `$t->dropForeign([...])`,
+`->change()` (MySQL). `Schema::hasTable()`, `hasColumn()`, `getColumns()`,
+`getTables()`, `rename()`, `dropAllTables()`. Column types: the usual integers,
+`string`, `char`, `text`, `json`, `uuid`, `boolean`, `decimal`, `float`, `date`,
+`dateTime`, `timestamp`, `enum`, `ipAddress`, … with `nullable()`, `default()`,
+`unsigned()`, `unique()`, `index()`, `comment()`, `useCurrent()`.
+
+`id()` and `foreignId()` are both `INT UNSIGNED`, matching the existing tables.
+SQL migrations (`--sql`, `-- up` / `-- down` sections) still work. Both MySQL
+and SQLite grammars are supported; SQLite cannot modify columns or add
+constraints to existing tables.
+
+`migrate`, `migrate:rollback [--step=N]`, `migrate:reset`, `migrate:fresh
+[--seed]` (asks first; `--force` skips), `migrate:status`, `db:show`,
+`db:table users`, `db:seed [--class=Name]`.
+
+### Factories and seeders
+
+```php
+// database/factories/PostFactory.php  (php console.php make:factory Post)
+class PostFactory extends Factory
+{
+    protected string $model = 'Post';
+
+    public function definition(): array
+    {
+        return [
+            'title' => fake()->unique()->sentence(4),
+            'body' => fake()->paragraphs(3, true),
+            'user_id' => User::factory(),            // nested factory → key
+            'views' => fake()->number(0, 500),
+        ];
+    }
+}
+
+Post::factory()->count(20)->create();
+Post::factory()->state(['published_at' => now()])->sequence(['views' => 1], ['views' => 2])->make();
+```
+
+`fake()` generates names, emails, sentences, numbers, dates, UUIDs, addresses,
+etc.; `fake()->unique()->email()` never repeats; `fake()->seed(42)` makes runs
+reproducible. Seeders in `database/seeders/*.php` return a closure and run with
+`db:seed` (or `migrate --seed`).
 
 ## Auth
 
@@ -206,25 +385,29 @@ All PHP warnings and notices are thrown as `ErrorException` (the `@` operator
 still silences), deprecations are logged. `log_info('User {id} logged in',
 ['id' => 5])` and `log_error/warning/debug` write to
 `storage/logs/app-YYYY-MM-DD.log`; `LOG_LEVEL` sets the threshold. With
-`APP_DEBUG=true` the exception page shows the code excerpt, chained causes and
-the stack trace, deliberately without argument values.
+`APP_DEBUG=true` the exception page shows the code excerpt, chained causes, the
+stack trace (deliberately without argument values) and the query log.
 
 ## Console
 
 ```
 serve [host:port]        route:list  route:cache  route:clear
-migrate  migrate:rollback [steps]  migrate:status  db:seed
-make:controller  make:model  make:middleware  make:migration  make:seeder
+migrate [--seed]  migrate:rollback [--step=N]  migrate:reset  migrate:fresh [--seed] [--force]  migrate:status
+db:seed [--class=]  db:show [connection]  db:table <name>
+make:controller  make:model [-m] [-f] [-c]  make:factory  make:middleware  make:migration [--create=|--table=|--sql]  make:seeder
 view:clear  cache:clear  key:generate  test [filter]
 ```
 
 ## Tests
 
 `tests/*.php` files call `test('name', fn () => …)` with `assert_same`,
-`assert_true`, `assert_contains`, `assert_throws`, and so on (see
+`assert_true`, `assert_contains`, `assert_throws`, `skip()`, and so on (see
 `core/testing.php`). State is reset between tests; `test_next_request()`
-simulates a request boundary so flash/session behaviour can be tested. The
-suite needs no database.
+simulates a request boundary so flash/session behaviour can be tested. Database
+tests run against an in-memory SQLite database; `php console.php test` loads
+the `pdo_sqlite` extension automatically when it is installed but not enabled.
+Without it those tests are skipped (set `DB_TEST_CONNECTION` to a throwaway
+connection to run them elsewhere).
 
 ## Production checklist
 

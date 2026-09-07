@@ -8,7 +8,17 @@ class TestFailure extends Exception
 {
 }
 
+class TestSkipped extends Exception
+{
+}
+
 $__tests = [];
+
+// Marks the current test as skipped (e.g. no database available).
+function skip(string $reason): never
+{
+    throw new TestSkipped($reason);
+}
 
 function test(string $name, callable $callback): void
 {
@@ -165,6 +175,7 @@ function run_tests(array $files): int
     global $__tests;
 
     $passed = 0;
+    $skipped = 0;
     $failures = [];
     $start = microtime(true);
 
@@ -182,6 +193,9 @@ function run_tests(array $files): int
                 ($case['callback'])();
                 $passed++;
                 echo '  ok   ' . $case['name'] . "\n";
+            } catch (TestSkipped $e) {
+                $skipped++;
+                echo '  skip ' . $case['name'] . ' (' . $e->getMessage() . ")\n";
             } catch (TestFailure $e) {
                 $failures[] = $case['name'];
                 echo '  FAIL ' . $case['name'] . "\n       " . $e->getMessage() . "\n";
@@ -196,7 +210,8 @@ function run_tests(array $files): int
     $elapsed = round((microtime(true) - $start) * 1000);
     $failed = count($failures);
 
-    echo "\n" . ($failed === 0 ? 'OK' : 'FAILED') . " — $passed passed, $failed failed ({$elapsed} ms)\n";
+    echo "\n" . ($failed === 0 ? 'OK' : 'FAILED') . " — $passed passed, $failed failed"
+        . ($skipped > 0 ? ", $skipped skipped" : '') . " ({$elapsed} ms)\n";
 
     return $failed === 0 ? 0 : 1;
 }

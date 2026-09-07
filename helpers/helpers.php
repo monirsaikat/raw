@@ -52,9 +52,27 @@ function is_debug(): bool
     return APP_DEBUG;
 }
 
-function now(): string
+// Prints as "Y-m-d H:i:s"; now()->addDays(3), now()->diffForHumans(), ...
+function now(): DateTimeValue
 {
-    return date('Y-m-d H:i:s');
+    return DateTimeValue::now();
+}
+
+function today(): DateTimeValue
+{
+    return DateTimeValue::today();
+}
+
+function collect(iterable $items = []): Collection
+{
+    return new Collection($items);
+}
+
+function fake(): Fake
+{
+    static $fake = null;
+
+    return $fake ??= new Fake();
 }
 
 function current_year($params = []): string

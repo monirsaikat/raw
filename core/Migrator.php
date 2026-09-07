@@ -1,12 +1,14 @@
 <?php
 
-// Runs database/migrations/*.sql in filename order. Each file has an `-- up`
-// section and an optional `-- down` section; rollback replays the latter
-// for the most recent batch. Applied migrations are tracked in `migrations`.
+// Runs database/migrations in filename order. Two formats are supported:
+//   *.php  — returns a Migration with up()/down() using the Schema builder
+//   *.sql  — plain SQL with `-- up` and optional `-- down` sections
+// Applied migrations are tracked in the `migrations` table in batches so
+// rollback() can undo the last batch and reset() everything.
 
 class Migrator
 {
-    public function __construct(private string $path)
+    public function __construct(private string $path, private ?string $connection = null)
     {
     }
 
@@ -20,15 +22,15 @@ class Migrator
             return [];
         }
 
-        $batch = (int) Database::scalar('SELECT COALESCE(MAX(batch), 0) FROM migrations') + 1;
+        $batch = (int) $this->connection()->scalar('SELECT COALESCE(MAX(batch), 0) FROM migrations') + 1;
         $ran = [];
 
         foreach ($pending as $name => $file) {
-            $this->execute($this->sections($file)['up']);
+            $this->runUp($file);
 
-            Database::insert(
-                'INSERT INTO migrations (migration, batch, ran_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
-                [$name, $batch]
+            $this->connection()->insert(
+                'INSERT INTO migrations (migration, batch, ran_at) VALUES (?, ?, ?)',
+                [$name, $batch, date('Y-m-d H:i:s')]
             );
 
             $ran[] = $name;
@@ -45,32 +47,49 @@ class Migrator
         $rolled = [];
 
         for ($i = 0; $i < $steps; $i++) {
-            $batch = Database::scalar('SELECT MAX(batch) FROM migrations');
+            $batch = $this->connection()->scalar('SELECT MAX(batch) FROM migrations');
 
             if ($batch === null) {
                 break;
             }
 
-            $rows = Database::select('SELECT migration FROM migrations WHERE batch = ? ORDER BY id DESC', [$batch]);
+            $rows = $this->connection()->select('SELECT migration FROM migrations WHERE batch = ? ORDER BY id DESC', [$batch]);
 
             foreach ($rows as $row) {
                 $name = $row['migration'];
-                $file = $this->path . '/' . $name . '.sql';
-                $down = is_file($file) ? $this->sections($file)['down'] : '';
+                $file = $this->files()[$name] ?? null;
 
-                if (self::statements($down) === []) {
-                    throw new RuntimeException("Migration [$name] has no '-- down' section, cannot roll back.");
+                if ($file === null) {
+                    throw new RuntimeException("Migration file for [$name] is missing; cannot roll back.");
                 }
 
-                $this->execute($down);
+                $this->runDown($file);
 
-                Database::delete('DELETE FROM migrations WHERE migration = ?', [$name]);
+                $this->connection()->delete('DELETE FROM migrations WHERE migration = ?', [$name]);
 
                 $rolled[] = $name;
             }
         }
 
         return $rolled;
+    }
+
+    // Rolls back every batch.
+    public function reset(): array
+    {
+        $this->ensureTable();
+
+        $batches = (int) $this->connection()->scalar('SELECT COUNT(DISTINCT batch) FROM migrations');
+
+        return $batches === 0 ? [] : $this->rollback($batches);
+    }
+
+    // Drops every table and runs all migrations from scratch.
+    public function fresh(): array
+    {
+        Schema::dropAllTables($this->connection);
+
+        return $this->run();
     }
 
     // [['migration' => name, 'batch' => int|null, 'ran_at' => string|null], ...]
@@ -94,6 +113,8 @@ class Migrator
 
     public function pending(): array
     {
+        $this->ensureTable();
+
         return array_diff_key($this->files(), $this->applied());
     }
 
@@ -102,8 +123,8 @@ class Migrator
     {
         $files = [];
 
-        foreach (glob($this->path . '/*.sql') ?: [] as $file) {
-            $files[basename($file, '.sql')] = $file;
+        foreach (array_merge(glob($this->path . '/*.php') ?: [], glob($this->path . '/*.sql') ?: []) as $file) {
+            $files[pathinfo($file, PATHINFO_FILENAME)] = $file;
         }
 
         ksort($files);
@@ -113,15 +134,72 @@ class Migrator
 
     private function applied(): array
     {
-        $rows = Database::select('SELECT migration, batch, ran_at FROM migrations');
+        $rows = $this->connection()->select('SELECT migration, batch, ran_at FROM migrations');
 
         return array_column($rows, null, 'migration');
+    }
+
+    private function connection(): Connection
+    {
+        return Database::connection($this->connection);
+    }
+
+    private function runUp(string $file): void
+    {
+        if (str_ends_with($file, '.php')) {
+            $this->runPhp($file, 'up');
+
+            return;
+        }
+
+        $this->execute($this->sections($file)['up']);
+    }
+
+    private function runDown(string $file): void
+    {
+        if (str_ends_with($file, '.php')) {
+            $this->runPhp($file, 'down');
+
+            return;
+        }
+
+        $down = $this->sections($file)['down'];
+
+        if (self::statements($down) === []) {
+            throw new RuntimeException('Migration [' . basename($file) . "] has no '-- down' section, cannot roll back.");
+        }
+
+        $this->execute($down);
+    }
+
+    // Runs up()/down() with the migration's (or the migrator's) connection
+    // as the default so Schema:: and models inside it target the right one.
+    private function runPhp(string $file, string $method): void
+    {
+        $migration = require $file;
+
+        if (!$migration instanceof Migration) {
+            throw new RuntimeException('Migration [' . basename($file) . '] must return an instance of Migration.');
+        }
+
+        $connection = $migration->getConnection() ?? $this->connection;
+        $previous = config('database.default');
+
+        if ($connection !== null) {
+            config_set('database.default', $connection);
+        }
+
+        try {
+            $migration->$method();
+        } finally {
+            config_set('database.default', $previous);
+        }
     }
 
     private function execute(string $sql): void
     {
         foreach (self::statements($sql) as $statement) {
-            Database::statement($statement);
+            $this->connection()->unprepared($statement);
         }
     }
 
@@ -152,20 +230,22 @@ class Migrator
 
     private function ensureTable(): void
     {
-        Database::statement(
-            'CREATE TABLE IF NOT EXISTS migrations (
-                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                migration VARCHAR(255) NOT NULL,
-                batch INT UNSIGNED NOT NULL DEFAULT 1,
-                ran_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )'
-        );
+        if (!Schema::hasTable('migrations', $this->connection)) {
+            Schema::create('migrations', function (Blueprint $table): void {
+                $table->increments('id');
+                $table->string('migration');
+                $table->unsignedInteger('batch')->default(1);
+                $table->dateTime('ran_at')->useCurrent();
+            }, $this->connection);
+
+            return;
+        }
 
         // Installs created before batches existed.
-        $columns = array_column(Database::select('SHOW COLUMNS FROM migrations'), 'Field');
-
-        if (!in_array('batch', $columns, true)) {
-            Database::statement('ALTER TABLE migrations ADD COLUMN batch INT UNSIGNED NOT NULL DEFAULT 1 AFTER migration');
+        if (!Schema::hasColumn('migrations', 'batch', $this->connection)) {
+            Schema::table('migrations', function (Blueprint $table): void {
+                $table->unsignedInteger('batch')->default(1)->after('migration');
+            }, $this->connection);
         }
     }
 }
