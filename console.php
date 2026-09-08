@@ -753,6 +753,456 @@ command('make:seeder', 'Create a database seeder [name, e.g. UserSeeder]', funct
         PHP) ? 0 : 1;
 });
 
+// ---------------------------------------------------------------- benchmarks --
+
+command('bench', 'Time the framework core in-process [--iterations=2000] [--json]', function (array $args) {
+    [, $options] = parse_arguments($args);
+    $n = max(100, (int) ($options['iterations'] ?? 2000));
+
+    require_once BASE_PATH . '/core/testing.php';
+
+    $results = [];
+
+    $measure = function (string $label, callable $operation, int $iterations) use (&$results): void {
+        $operation(); // warm caches
+
+        $start = hrtime(true);
+
+        for ($i = 0; $i < $iterations; $i++) {
+            $operation();
+        }
+
+        $nanoseconds = max(1, hrtime(true) - $start);
+
+        $results[] = [
+            'benchmark' => $label,
+            'iterations' => $iterations,
+            'total_ms' => round($nanoseconds / 1e6, 1),
+            'per_op_us' => round($nanoseconds / $iterations / 1e3, 1),
+            'ops_per_sec' => (int) round($iterations / ($nanoseconds / 1e9)),
+        ];
+    };
+
+    $skipped = fn (string $label) => ['benchmark' => $label, 'iterations' => 0, 'total_ms' => null, 'per_op_us' => null, 'ops_per_sec' => null];
+
+    $results[] = [
+        'benchmark' => 'Bootstrap: env, config, core modules',
+        'iterations' => 1,
+        'total_ms' => round((APP_BOOTSTRAPPED - APP_START) * 1000, 2),
+        'per_op_us' => null,
+        'ops_per_sec' => null,
+    ];
+
+    // Routing against a table of 400 routes, no middleware.
+    routes_reset();
+    global_middleware([]);
+
+    for ($i = 0; $i < 200; $i++) {
+        get("/static-$i", fn () => 'ok', "static.$i");
+        get("/items-$i/{id:\d+}/{slug?}", fn ($id) => $id, "items.$i");
+    }
+
+    $measure('Route dispatch: static path (400 routes)', fn () => dispatch('GET', '/static-150'), $n);
+    $measure('Route dispatch: {id:\d+}/{slug?} path', fn () => dispatch('GET', '/items-150/42/hello'), $n);
+    $measure('route_url() with parameters', fn () => route_url('items.150', ['id' => 42, 'slug' => 'hello']), $n);
+
+    $measure('Query builder: compile a 5-clause SELECT', fn () => Database::table('posts')
+        ->select('id', 'title')->where('published', 1)->whereIn('category_id', [1, 2, 3])
+        ->whereNull('deleted_at')->orderByDesc('created_at')->limit(20)->toSql(), $n);
+
+    $measure('Validation: 3 fields, 8 rules', fn () => validate(
+        ['name' => 'Ann', 'email' => 'ann@example.com', 'age' => '30'],
+        ['name' => 'required|max:100', 'email' => 'required|email', 'age' => 'required|integer|between:18,99']
+    ), $n);
+
+    $rows = array_map(fn ($i) => ['id' => $i, 'n' => $i % 7], range(1, 100));
+    $measure('Collection: filter/map/sum over 100 rows', fn () => collect($rows)->filter(fn ($r) => $r['n'] > 2)->map(fn ($r) => $r['id'] * 2)->sum(), $n);
+
+    $measure('View: render a standalone template', fn () => view('errors/error', ['status' => 200, 'title' => 'OK', 'message' => 'Hello']), intdiv($n, 10));
+
+    // Whole requests through the in-process client: routing, middleware, session, views.
+    http_use_app_routes();
+    global_middleware(['csrf']);
+
+    $measure('Full request: GET / (layout, session, CSRF)', fn () => http_get('/'), intdiv($n, 10));
+    $measure('Full request: GET /api/ping (JSON)', fn () => http_json('GET', '/api/ping'), intdiv($n, 10));
+    $measure('Full request: POST /contact (validation → redirect)', fn () => http_post('/contact', ['name' => '']), intdiv($n, 10));
+
+    try {
+        use_test_database();
+
+        $measure('SQLite in memory: insert', fn () => Database::table('messages')->insert(['name' => 'Ann', 'email' => 'a@b.co', 'message' => 'Hi']), intdiv($n, 2));
+        $measure('SQLite in memory: find() by id', fn () => Database::table('messages')->find(1), $n);
+        $measure('SQLite in memory: Model::find() + toArray()', fn () => Message::find(1)->toArray(), $n);
+        $measure('SQLite in memory: 50-row get() hydrated', fn () => Message::limit(50)->get(), intdiv($n, 10));
+    } catch (TestSkipped $e) {
+        $results[] = $skipped('SQLite: skipped (' . $e->getMessage() . ')');
+    }
+
+    try {
+        $mysql = Database::connection('mysql');
+        $mysql->pdo();
+
+        $measure('MySQL: SELECT 1 round-trip', fn () => $mysql->scalar('SELECT 1'), intdiv($n, 2));
+        $measure('MySQL: SELECT * FROM users LIMIT 10', fn () => $mysql->table('users')->limit(10)->get(), intdiv($n, 2));
+    } catch (Throwable $e) {
+        $results[] = $skipped('MySQL: skipped (not reachable)');
+    }
+
+    $opcache = function_exists('opcache_get_status') && @opcache_get_status(false) ? 'on' : 'off';
+    $environment = sprintf('PHP %s, %s %s, OPcache %s', PHP_VERSION, php_uname('s'), php_uname('m'), $opcache);
+
+    if (isset($options['json'])) {
+        line(json_encode(['environment' => $environment, 'peak_memory_mb' => round(memory_get_peak_usage(true) / 1048576, 1), 'results' => $results], JSON_PRETTY_PRINT));
+
+        return 0;
+    }
+
+    print_table(['Benchmark', 'Iterations', 'Total', 'Per op', 'Ops/sec'], array_map(fn ($r) => [
+        $r['benchmark'],
+        $r['iterations'] ?: '',
+        $r['total_ms'] === null ? '' : $r['total_ms'] . ' ms',
+        $r['per_op_us'] === null ? '' : $r['per_op_us'] . ' us',
+        $r['ops_per_sec'] === null ? '' : number_format($r['ops_per_sec']),
+    ], $results));
+
+    line();
+    line($environment . ', peak memory ' . round(memory_get_peak_usage(true) / 1048576, 1) . ' MB');
+    line('In-process numbers exclude PHP start-up and the web server; use bench:http for end-to-end throughput.');
+
+    if (PHP_OS_FAMILY === 'Windows') {
+        line('Windows: real-time antivirus scanning adds several milliseconds to every changed file (rate-limit counters,');
+        line('cache writes, sessions). Exclude storage/ from scanning on development machines for representative numbers.');
+    }
+
+    return 0;
+});
+
+function find_apache_bench(): ?string
+{
+    $lookup = PHP_OS_FAMILY === 'Windows' ? 'where ab 2>NUL' : 'which ab 2>/dev/null';
+    $found = strtok(trim((string) shell_exec($lookup)), "\r\n");
+
+    if ($found !== false && $found !== '' && is_file($found)) {
+        return $found;
+    }
+
+    foreach (['C:\\xampp\\apache\\bin\\ab.exe', '/usr/bin/ab', '/usr/sbin/ab', '/opt/homebrew/bin/ab'] as $candidate) {
+        if (is_file($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return null;
+}
+
+// Built-in load client on libcurl's multi interface: keeps `concurrency`
+// requests in flight until `requests` have completed and times each one.
+// It runs wherever PHP's curl extension does, reuses connections the way a
+// browser does, and reports latency with sub-millisecond resolution.
+function load_test(string $url, int $requests, int $concurrency): array
+{
+    $multi = curl_multi_init();
+    $handle = function () use ($url) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTPHEADER => ['Accept: */*'],
+        ]);
+
+        return $ch;
+    };
+
+    $times = [];
+    $failed = 0;
+    $non2xx = 0;
+    $bytes = 0;
+    $started = 0;
+    $completed = 0;
+    $begin = microtime(true);
+
+    for ($i = 0; $i < min($concurrency, $requests); $i++) {
+        curl_multi_add_handle($multi, $handle());
+        $started++;
+    }
+
+    do {
+        curl_multi_exec($multi, $active);
+
+        if ($active) {
+            curl_multi_select($multi, 1.0);
+        }
+
+        while ($info = curl_multi_info_read($multi)) {
+            $ch = $info['handle'];
+            $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+
+            if ($info['result'] !== CURLE_OK) {
+                $failed++;
+            } elseif ($code < 200 || $code >= 300) {
+                $non2xx++;
+            }
+
+            $times[] = curl_getinfo($ch, CURLINFO_TOTAL_TIME) * 1000;
+            $bytes = (int) curl_getinfo($ch, CURLINFO_SIZE_DOWNLOAD);
+            curl_multi_remove_handle($multi, $ch);
+            $completed++;
+
+            if ($started < $requests) {
+                curl_multi_add_handle($multi, $handle());
+                $started++;
+                $active = 1;
+            }
+        }
+    } while ($active || $completed < $requests);
+
+    $elapsed = microtime(true) - $begin;
+    curl_multi_close($multi);
+    sort($times);
+    $percentile = fn (int $p) => round($times[(int) floor($p / 100 * (count($times) - 1))], 2);
+
+    return [
+        'engine' => 'curl',
+        'requests' => $completed,
+        'elapsed_s' => round($elapsed, 3),
+        'requests_per_second' => round($completed / max($elapsed, 1e-6), 1),
+        'mean_ms' => round(array_sum($times) / max(count($times), 1), 2),
+        'p50_ms' => $percentile(50),
+        'p95_ms' => $percentile(95),
+        'p99_ms' => $percentile(99),
+        'failed' => $failed,
+        'non_2xx' => $non2xx,
+        'document_bytes' => $bytes,
+    ];
+}
+
+// The same measurement through ApacheBench, for cross-checking. ab counts a
+// response whose length differs from the first one as "failed"; frameworks
+// that embed random-length tokens trigger that on every request, so those
+// are subtracted and `failed` holds connect/receive errors and exceptions.
+function apache_bench_run(string $ab, string $url, int $requests, int $concurrency): array
+{
+    $output = (string) shell_exec(sprintf('%s -n %d -c %d -q %s 2>&1', escapeshellarg($ab), $requests, $concurrency, escapeshellarg($url)));
+    $number = fn (string $pattern) => preg_match($pattern, $output, $m) ? (float) $m[1] : null;
+    $failed = (int) $number('/Failed requests:\s+(\d+)/');
+    $lengthMismatches = (int) $number('/\(Connect: \d+, Receive: \d+, Length: (\d+), Exceptions: \d+\)/');
+
+    return [
+        'engine' => 'ab',
+        'requests' => (int) $number('/Complete requests:\s+(\d+)/'),
+        'elapsed_s' => $number('/Time taken for tests:\s+([\d.]+)/'),
+        'requests_per_second' => $number('/Requests per second:\s+([\d.]+)/'),
+        'mean_ms' => $number('/Time per request:\s+([\d.]+) \[ms\] \(mean\)/'),
+        'p50_ms' => $number('/\s+50%\s+(\d+)/'),
+        'p95_ms' => $number('/\s+95%\s+(\d+)/'),
+        'p99_ms' => $number('/\s+99%\s+(\d+)/'),
+        'failed' => max(0, $failed - $lengthMismatches),
+        'non_2xx' => (int) $number('/Non-2xx responses:\s+(\d+)/'),
+        'document_bytes' => (int) $number('/Document Length:\s+(\d+)/'),
+        'raw' => $output,
+    ];
+}
+
+// Picks the load client for bench:http and bench:compare: the built-in curl
+// client, or ApacheBench when --ab is passed. Returns null after printing
+// why neither is available.
+function load_client(array $options): ?callable
+{
+    if (isset($options['ab'])) {
+        $ab = find_apache_bench();
+
+        if ($ab === null) {
+            error_line('ApacheBench (ab) was not found. It ships with Apache (XAMPP: apache/bin/ab.exe, Debian: apache2-utils).');
+
+            return null;
+        }
+
+        return fn (string $url, int $requests, int $concurrency) => apache_bench_run($ab, $url, $requests, $concurrency);
+    }
+
+    if (!function_exists('curl_multi_init')) {
+        error_line('The curl extension is not loaded. Enable it, or pass --ab to use ApacheBench.');
+
+        return null;
+    }
+
+    return 'load_test';
+}
+
+command('bench:http', 'Load-test a URL [url] [--requests=500] [--concurrency=10] [--ab] [--raw]', function (array $args) {
+    [$positional, $options] = parse_arguments($args);
+    $url = (string) ($positional[0] ?? '');
+
+    if ($url === '') {
+        error_line('Usage: php console.php bench:http http://localhost/myapp/ --requests=500 --concurrency=10');
+
+        return 1;
+    }
+
+    $requests = max(1, (int) ($options['requests'] ?? 500));
+    $concurrency = max(1, min($requests, (int) ($options['concurrency'] ?? 10)));
+    $client = load_client($options);
+
+    if ($client === null) {
+        return 1;
+    }
+
+    line("Sending $requests requests, $concurrency at a time, to $url" . (isset($options['ab']) ? ' (ApacheBench)' : ''));
+
+    $result = $client($url, $requests, $concurrency);
+    $ms = fn ($value) => $value === null ? 'n/a' : $value . ' ms';
+
+    print_table(['Metric', 'Value'], [
+        ['Requests per second', ($result['requests_per_second'] ?? 'n/a') . ' req/s'],
+        ['Time per request (mean)', $ms($result['mean_ms'])],
+        ['50% of requests within', $ms($result['p50_ms'])],
+        ['95% of requests within', $ms($result['p95_ms'])],
+        ['99% of requests within', $ms($result['p99_ms'])],
+        ['Failed requests', $result['failed']],
+        ['Non-2xx responses', $result['non_2xx']],
+        ['Document length', $result['document_bytes'] . ' bytes'],
+        ['Completed', $result['requests'] . ' requests in ' . $result['elapsed_s'] . ' s'],
+    ]);
+
+    if (isset($options['raw'], $result['raw'])) {
+        line();
+        line($result['raw']);
+    }
+
+    return ($result['requests'] ?? 0) > 0 ? 0 : 1;
+});
+
+// Load-tests several targets in alternating rounds so that background noise
+// hits every target equally, then reports the median of the runs.
+command('bench:compare', 'Compare targets under load [name=url ...] [--requests=1000] [--concurrency=10] [--runs=3] [--ab] [--json]', function (array $args) {
+    [$positional, $options] = parse_arguments($args);
+    $targets = [];
+
+    foreach ($positional as $argument) {
+        [$name, $url] = array_pad(explode('=', $argument, 2), 2, null);
+
+        if ($url === null) {
+            $url = $name;
+            $name = (string) parse_url($url, PHP_URL_HOST) . (string) parse_url($url, PHP_URL_PATH);
+        }
+
+        $targets[$name] = $url;
+    }
+
+    if ($targets === []) {
+        error_line('Usage: php console.php bench:compare comfree=http://localhost/app/ laravel=http://localhost/laravel/public/ --requests=1000 --concurrency=10 --runs=3');
+
+        return 1;
+    }
+
+    $requests = max(1, (int) ($options['requests'] ?? 1000));
+    $concurrency = max(1, min($requests, (int) ($options['concurrency'] ?? 10)));
+    $runs = max(1, (int) ($options['runs'] ?? 3));
+    $quiet = isset($options['json']);
+    $client = load_client($options);
+
+    if ($client === null) {
+        return 1;
+    }
+
+    if (!$quiet) {
+        line('Warming up ' . count($targets) . ' target(s)...');
+    }
+
+    // A short unmeasured burst per target fills OPcache and template caches
+    // so the first measured run is not a cold start.
+    foreach ($targets as $url) {
+        $client($url, 50, 5);
+    }
+
+    $samples = [];
+
+    for ($run = 1; $run <= $runs; $run++) {
+        foreach ($targets as $name => $url) {
+            if (!$quiet) {
+                line("Run $run/$runs: $name ($url)");
+            }
+
+            $result = $client($url, $requests, $concurrency);
+
+            foreach (['requests_per_second', 'p50_ms', 'p95_ms', 'p99_ms'] as $metric) {
+                $samples[$name][$metric][] = $result[$metric];
+            }
+
+            $samples[$name]['failed'] = ($samples[$name]['failed'] ?? 0) + $result['failed'] + $result['non_2xx'];
+            $samples[$name]['bytes'] = $result['document_bytes'];
+        }
+    }
+
+    $median = function (array $values): ?float {
+        $values = array_values(array_filter($values, fn ($v) => $v !== null));
+
+        if ($values === []) {
+            return null;
+        }
+
+        sort($values);
+        $middle = intdiv(count($values), 2);
+
+        return count($values) % 2 ? $values[$middle] : ($values[$middle - 1] + $values[$middle]) / 2;
+    };
+
+    $rows = [];
+
+    foreach ($samples as $name => $sample) {
+        $rows[] = [
+            'target' => $name,
+            'url' => $targets[$name],
+            'requests_per_second' => $median($sample['requests_per_second']),
+            'p50_ms' => $median($sample['p50_ms']),
+            'p95_ms' => $median($sample['p95_ms']),
+            'p99_ms' => $median($sample['p99_ms']),
+            'failed' => $sample['failed'],
+            'document_bytes' => $sample['bytes'],
+        ];
+    }
+
+    usort($rows, fn ($a, $b) => ($b['requests_per_second'] ?? 0) <=> ($a['requests_per_second'] ?? 0));
+    $fastest = $rows[0]['requests_per_second'] ?? null;
+
+    foreach ($rows as &$row) {
+        $row['relative'] = $fastest ? round(($row['requests_per_second'] ?? 0) / $fastest * 100) : null;
+    }
+
+    unset($row);
+
+    if ($quiet) {
+        line(json_encode([
+            'engine' => isset($options['ab']) ? 'ab' : 'curl',
+            'requests' => $requests,
+            'concurrency' => $concurrency,
+            'runs' => $runs,
+            'results' => $rows,
+        ], JSON_PRETTY_PRINT));
+
+        return 0;
+    }
+
+    $ms = fn ($value) => $value === null ? 'n/a' : $value . ' ms';
+
+    line();
+    print_table(['Target', 'Req/s (median)', 'p50', 'p95', 'p99', 'Failed', 'Bytes', 'Relative'], array_map(fn ($r) => [
+        $r['target'],
+        $r['requests_per_second'] === null ? 'n/a' : number_format($r['requests_per_second'], 1),
+        $ms($r['p50_ms']),
+        $ms($r['p95_ms']),
+        $ms($r['p99_ms']),
+        $r['failed'],
+        $r['document_bytes'],
+        $r['relative'] === null ? '' : $r['relative'] . '%',
+    ], $rows));
+    line();
+    line("$requests requests, $concurrency concurrent, median of $runs runs per target, targets alternated between runs" . (isset($options['ab']) ? ', measured with ApacheBench.' : ', measured with the built-in curl client.'));
+
+    return 0;
+});
+
 command('test', 'Run the test suite [optional filename filter]', function (array $args) {
     // Database tests want an in-memory SQLite database. If the extension
     // exists but is not loaded, re-run PHP with it enabled.

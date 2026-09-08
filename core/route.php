@@ -266,6 +266,10 @@ function route(): void
         $_SESSION['_previous_url'] = request_url();
     }
 
+    if (!headers_sent()) {
+        header('X-Response-Time: ' . round((microtime(true) - APP_START) * 1000, 2) . 'ms');
+    }
+
     send_response($result);
 
     ob_end_flush();

@@ -40,7 +40,7 @@ test('real environment variables win over the file unless overwriting', function
     $file = sys_get_temp_dir() . '/env-test-' . bin2hex(random_bytes(4));
     $key = 'T' . strtoupper(bin2hex(random_bytes(3)));
 
-    putenv("$key=real");
+    $_SERVER[$key] = 'real';   // how PHP presents a real environment variable
     file_put_contents($file, "$key=file\n");
 
     load_env($file);

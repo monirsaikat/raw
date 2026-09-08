@@ -1,6 +1,8 @@
 <?php
 
-// Loads KEY=value pairs from a .env file into $_ENV / putenv(). Variables
+// Loads KEY=value pairs from a .env file into $_ENV and $_SERVER (never
+// putenv(): the process environment is shared between threads under a
+// threaded web server, so values would leak between requests). Variables
 // already present in the real environment win over the file. Supports `#`
 // comments, `export KEY=value`, and single- or double-quoted values.
 
@@ -41,20 +43,45 @@ function load_env(string $path, bool $overwrite = false): void
             $value = preg_replace('/\s+#.*$/', '', $value);
         }
 
-        if (!$overwrite && (array_key_exists($key, $_ENV) || getenv($key) !== false)) {
+        if (!$overwrite && env_from_environment($key) !== null) {
             continue;
         }
 
-        putenv("$key=$value");
         $_ENV[$key] = $value;
+        $_SERVER[$key] = $value;
     }
 }
 
+// A variable from the real environment, or null. Web servers hand
+// variables over through $_SERVER/$_ENV (Apache SetEnv, FPM env[]);
+// getenv() is consulted only under the CLI SAPIs, where the process
+// environment belongs to this process alone. Under a threaded server it
+// can carry values left behind by other requests.
+function env_from_environment(string $key): ?string
+{
+    if (array_key_exists($key, $_ENV)) {
+        return (string) $_ENV[$key];
+    }
+
+    if (array_key_exists($key, $_SERVER) && is_scalar($_SERVER[$key])) {
+        return (string) $_SERVER[$key];
+    }
+
+    if (PHP_SAPI === 'cli' || PHP_SAPI === 'cli-server' || PHP_SAPI === 'phpdbg') {
+        $value = getenv($key);
+
+        return $value === false ? null : $value;
+    }
+
+    return null;
+}
+
+// Reads a variable from .env or the real environment.
 function env(string $key, $default = null)
 {
-    $value = $_ENV[$key] ?? getenv($key);
+    $value = env_from_environment($key);
 
-    if ($value === false || $value === null) {
+    if ($value === null) {
         return $default;
     }
 

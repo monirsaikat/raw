@@ -24,6 +24,7 @@ return [
         'csrf_meta' => 'csrf_meta',
         'method_field' => 'method_field',
         'current_year' => 'current_year',
+        'perf_stats' => 'perf_stats',
         'csp_nonce' => 'csp_nonce',
     ],
 

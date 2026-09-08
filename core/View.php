@@ -67,6 +67,7 @@ class View
             'old' => flash('old') ?? [],
             'flash' => flash_all(),
             'current_route' => current_route_name(),
+            'app_debug' => APP_DEBUG,
         ];
     }
 

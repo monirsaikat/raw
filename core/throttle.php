@@ -4,11 +4,27 @@
 // middleware keys on client IP + method + path, so it protects a single
 // endpoint (login, register, contact) without touching the rest of the site.
 
+// Counts one attempt for $key. The counter file is read, incremented and
+// written under a single exclusive lock, so concurrent requests never lose
+// increments and the whole operation costs one file open.
 function rate_limit_attempt(string $key, int $max, int $decaySeconds): array
 {
-    $cacheKey = 'rate-limit:' . $key;
+    $directory = cache_path();
+
+    if (!is_dir($directory) && !@mkdir($directory, 0755, true) && !is_dir($directory)) {
+        throw new RuntimeException("Cache directory [$directory] is not writable.");
+    }
+
+    $handle = @fopen(cache_file('rate-limit:' . $key), 'c+b');
+
+    if ($handle === false) {
+        throw new RuntimeException('Unable to open the rate-limit counter file.');
+    }
+
+    flock($handle, LOCK_EX);
+
     $now = time();
-    $entry = cache_get($cacheKey);
+    $entry = @unserialize((string) stream_get_contents($handle));
 
     if (!is_array($entry) || ($entry['expires'] ?? 0) <= $now) {
         $entry = ['count' => 0, 'expires' => $now + $decaySeconds];
@@ -16,7 +32,12 @@ function rate_limit_attempt(string $key, int $max, int $decaySeconds): array
 
     $entry['count']++;
 
-    cache_set($cacheKey, $entry, max(1, $entry['expires'] - $now));
+    rewind($handle);
+    ftruncate($handle, 0);
+    fwrite($handle, serialize($entry));
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
 
     return [
         'allowed' => $entry['count'] <= $max,

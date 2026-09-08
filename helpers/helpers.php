@@ -88,6 +88,24 @@ function method_field($params = []): string
     return '<input type="hidden" name="_method" value="' . htmlspecialchars($method, ENT_QUOTES, 'UTF-8') . '">';
 }
 
+// "Rendered in 4.2 ms · 1.5 MB · 3 queries" — {perf_stats} in templates
+// (the layout shows it in the footer when APP_DEBUG is on).
+function perf_stats($params = []): string
+{
+    $parts = [
+        round((microtime(true) - APP_START) * 1000, 1) . ' ms',
+        round(memory_get_peak_usage(true) / 1048576, 1) . ' MB',
+    ];
+
+    $queries = count(Database::queryLog());
+
+    if ($queries > 0 || APP_DEBUG) {
+        $parts[] = $queries . ' ' . ($queries === 1 ? 'query' : 'queries');
+    }
+
+    return 'Rendered in ' . implode(' · ', $parts);
+}
+
 function dump(...$values): void
 {
     foreach ($values as $value) {

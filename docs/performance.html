@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance · ComfreePHP Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">C</span>ComfreePHP <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Performance</h1>
+            <p class="lead">A request touches a few dozen small files and no framework object graph. ComfreePHP ships the tools to measure that on your own hardware, and every response reports how long it took.</p>
+
+            <h2>Why it is fast</h2>
+            <ul>
+                <li><strong>Small surface.</strong> Bootstrap loads about thirty files and registers a handful of closures. There is no service-provider phase, no event dispatcher warming up, no container scan.</li>
+                <li><strong>Lazy everything.</strong> Sessions start on first use, the database connects on the first query, the template engine is created on the first render, the gate on the first check.</li>
+                <li><strong>Pre-compiled routing.</strong> Static paths are an array lookup; dynamic paths use regexes compiled once and cached with <code>route:cache</code>.</li>
+                <li><strong>No reflection on the hot path</strong> except the one call that builds the controller, and nothing is proxied.</li>
+                <li><strong>OPcache-friendly.</strong> Plain files, no generated code at runtime, so the whole framework stays in the opcode cache.</li>
+            </ul>
+
+            <h2>Every response reports its time</h2>
+            <p>Each response carries an <code>X-Response-Time</code> header measured from the start of bootstrap to the moment the body is sent. With <code>APP_DEBUG=true</code> the layout footer also prints <code>Rendered in 5.4 ms · 2 MB · 1 query</code> through the <code>{perf_stats}</code> template tag.</p>
+<pre><code class="language-bash">curl -sI http://localhost/myapp/ | grep X-Response-Time
+X-Response-Time: 6.05ms</code></pre>
+
+            <h2>Measuring</h2>
+            <h3>In-process: console bench</h3>
+            <p><code>php console.php bench</code> times the framework's own pieces in one process: bootstrap, routing, query compilation, validation, collections, view rendering, whole requests through the test client, and database round-trips on SQLite and MySQL. Use <code>--iterations=N</code> to run longer and <code>--json</code> for machine-readable output. Run it with OPcache enabled for the CLI to match a web server:</p>
+<pre><code class="language-bash">php -d opcache.enable_cli=1 -d extension=pdo_sqlite console.php bench</code></pre>
+
+            <h3>End to end: console bench:http</h3>
+            <p><code>php console.php bench:http &lt;url&gt;</code> uses a built-in load client on PHP's curl extension (persistent connections, per-request timing with sub-millisecond resolution, no external tool) against a running server and summarises requests per second, latency percentiles and failures. Options: <code>--requests=1000 --concurrency=10 --raw</code>, and <code>--ab</code> to measure with ApacheBench (<code>apache/bin/ab.exe</code> in XAMPP, <code>apache2-utils</code> on Debian) instead of the built-in client.</p>
+<pre><code class="language-bash">php console.php bench:http http://localhost/myapp/ --requests=1000 --concurrency=10
+php console.php bench:http http://localhost/myapp/api/ping --requests=1000 --concurrency=10</code></pre>
+
+            <h2>Reference numbers</h2>
+            <p>Measured on 2026-09-08 on a Windows 11 developer laptop: XAMPP, Apache 2.4 with mod_php, PHP 8.3.31 with OPcache, MariaDB 10.11, Windows Defender active. The same machine hosts the client, so absolute numbers are conservative; the point is the order of magnitude and the relative costs.</p>
+
+            <h3>In-process (console bench, OPcache on)</h3>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Benchmark</th><th>Per operation</th><th>Operations / second</th></tr>
+                <tr><td>Bootstrap: env, config, core modules (CLI, includes compiling)</td><td>15 ms</td><td></td></tr>
+                <tr><td>Route dispatch, static path among 400 routes</td><td>2.3 µs</td><td>439,000</td></tr>
+                <tr><td>Route dispatch, <code>{id:\d+}/{slug?}</code> path</td><td>32 µs</td><td>31,000</td></tr>
+                <tr><td><code>route_url()</code> with parameters</td><td>1.6 µs</td><td>625,000</td></tr>
+                <tr><td>Query builder: compile a 5-clause SELECT</td><td>9.7 µs</td><td>103,000</td></tr>
+                <tr><td>Validation: 3 fields, 8 rules</td><td>8.3 µs</td><td>121,000</td></tr>
+                <tr><td>Collection: filter/map/sum over 100 rows</td><td>11 µs</td><td>92,000</td></tr>
+                <tr><td>View: render a standalone template</td><td>14 µs</td><td>74,000</td></tr>
+                <tr><td>Full request: GET / (layout, session, CSRF)</td><td>281 µs</td><td>3,600</td></tr>
+                <tr><td>Full request: GET /api/ping (JSON)</td><td>27 µs</td><td>37,000</td></tr>
+                <tr><td>SQLite in memory: find() by id</td><td>21 µs</td><td>49,000</td></tr>
+                <tr><td>SQLite in memory: Model::find() + toArray()</td><td>32 µs</td><td>32,000</td></tr>
+                <tr><td>MySQL: SELECT 1 round-trip</td><td>167 µs</td><td>6,000</td></tr>
+                <tr><td>MySQL: SELECT * FROM users LIMIT 10</td><td>199 µs</td><td>5,000</td></tr>
+            </table>
+            </div>
+            <p>Peak memory for the whole run: 4 MB. The CLI bootstrap figure includes compiling every file because a CLI process starts with an empty opcode cache; under Apache the files are already cached, which is why a full home-page response arrives in about 6 ms including bootstrap and rendering (see the header above).</p>
+
+            <h3>End to end (ApacheBench, 1000 requests, 10 concurrent)</h3>
+            <div class="table-wrap">
+            <table>
+                <tr><th>URL</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>Failed</th></tr>
+                <tr><td><code>/</code> home page: layout, session, CSRF token, Smarty</td><td>310 to 450</td><td>18 ms</td><td>42 to 51 ms</td><td>0</td></tr>
+                <tr><td><code>/contact</code> form page</td><td>490</td><td>20 ms</td><td>38 ms</td><td>0</td></tr>
+                <tr><td><code>/api/ping</code> JSON</td><td>700 to 900</td><td>8 ms</td><td>11 to 15 ms</td><td>0</td></tr>
+            </table>
+            </div>
+            <p>Ranges cover several runs; Windows and the shared client account for the spread. The <code>X-Response-Time</code> header on the same pages reads 6 ms for the home page and 2 ms for the JSON endpoint, so most of the wall-clock time above is Apache, the network stack and PHP start-up rather than the framework.</p>
+
+            <h2>Comparing with other frameworks</h2>
+            <p>The <a href="comparison.html">Comparison</a> page publishes measured numbers against Laravel, Symfony and plain PHP on the same machine, and <code>php console.php bench:compare name=url ...</code> runs the same alternating-round ApacheBench comparison against any set of URLs. The <code>benchmarks/</code> folder holds the equivalent routes and templates for the other frameworks plus a setup script, so anyone can reproduce the table on their own hardware.</p>
+
+            <h2>What costs the most</h2>
+            <ul>
+                <li><strong>Writing files on Windows.</strong> Real-time antivirus scanning re-scans every file whose content changed, which adds around 9 ms to a rate-limit counter update, a cache write or a session save. It is invisible on Linux and vanishes on Windows when <code>storage/</code> is excluded from scanning. The <code>bench</code> command prints a reminder on Windows.</li>
+                <li><strong>Sessions.</strong> Any page that renders the layout starts a session (CSRF token, current user). A JSON endpoint that touches none of that costs no session I/O.</li>
+                <li><strong>Database round-trips.</strong> A MySQL query costs more than everything the framework does for a request combined. Eager load relationships, avoid N+1, and cache what does not change.</li>
+                <li><strong>Template compilation.</strong> Compile checks are off in production; run <code>view:clear</code> after deploying templates rather than paying a <code>filemtime()</code> per template per request.</li>
+            </ul>
+
+            <h2>Production settings that matter</h2>
+            <ul>
+                <li><code>APP_DEBUG=false</code>: no query log, no debug page, no template compile checks.</li>
+                <li><code>opcache.enable=1</code>, and <code>opcache.validate_timestamps=0</code> on immutable deployments.</li>
+                <li><code>php console.php route:cache</code> after route changes.</li>
+                <li>Enable <code>mod_deflate</code> and <code>mod_expires</code>; the shipped <code>.htaccess</code> uses them when present, and <code>asset()</code> versions URLs so assets can be cached for a year.</li>
+                <li>Use <code>simplePaginate()</code> on very large tables to skip the COUNT query, and <code>cursor()</code> or <code>chunk()</code> for exports.</li>
+            </ul>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

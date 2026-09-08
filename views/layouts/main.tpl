@@ -75,6 +75,9 @@
                 <a href="{navigate name='contact'}">Contact</a>
             </div>
         </div>
+        {if $app_debug}
+            <div class="container mt-2 small text-muted">{perf_stats}</div>
+        {/if}
     </footer>
 
     <script src="{asset path='assets/vendor/bootstrap/js/bootstrap.bundle.min.js'}"></script>

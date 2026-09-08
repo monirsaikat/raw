@@ -2,7 +2,9 @@
 
 // File-based cache in storage/cache. Values are serialised, so anything
 // serialisable (arrays, models) works. TTL is in seconds; 0 means forever.
-// Writes go through a temp file + rename so readers never see half a file.
+// Writers take an exclusive lock and readers a shared one, so a reader
+// never sees a half-written entry (and no temp-file rename is needed,
+// which is expensive on Windows).
 
 function cache_path(): string
 {
@@ -22,9 +24,18 @@ function cache_get(string $key, $default = null)
         return $default;
     }
 
-    $raw = @file_get_contents($file);
+    $handle = @fopen($file, 'rb');
 
-    if ($raw === false) {
+    if ($handle === false) {
+        return $default;
+    }
+
+    flock($handle, LOCK_SH);
+    $raw = stream_get_contents($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+
+    if ($raw === false || $raw === '') {
         return $default;
     }
 
@@ -52,22 +63,24 @@ function cache_set(string $key, $value, int $ttl = 3600): void
     }
 
     $file = cache_file($key);
-    $temp = $file . '.' . bin2hex(random_bytes(4)) . '.tmp';
 
     $payload = serialize([
         'expires' => $ttl > 0 ? time() + $ttl : 0,
         'value' => $value,
     ]);
 
-    if (@file_put_contents($temp, $payload, LOCK_EX) === false) {
+    $handle = @fopen($file, 'cb');
+
+    if ($handle === false) {
         throw new RuntimeException("Unable to write cache file [$file].");
     }
 
-    if (!@rename($temp, $file)) {
-        // Windows can refuse to rename over an open file; fall back to a copy.
-        @copy($temp, $file);
-        @unlink($temp);
-    }
+    flock($handle, LOCK_EX);
+    ftruncate($handle, 0);
+    fwrite($handle, $payload);
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
 }
 
 function cache_has(string $key): bool

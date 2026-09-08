@@ -53,3 +53,6 @@ gate_boot();
 foreach (glob(BASE_PATH . '/middleware/*.php') ?: [] as $file) {
     require_once $file;
 }
+
+// Bootstrap cost is APP_BOOTSTRAPPED - APP_START (see `console bench`).
+define('APP_BOOTSTRAPPED', microtime(true));

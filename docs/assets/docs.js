@@ -36,6 +36,8 @@
         { title: 'Tooling', pages: [
             ['console.html', 'Console'],
             ['testing.html', 'Testing'],
+            ['performance.html', 'Performance'],
+            ['comparison.html', 'Comparison'],
             ['deployment.html', 'Deployment'],
             ['helpers.html', 'Helpers reference'],
         ]},

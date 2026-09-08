@@ -496,6 +496,26 @@ automatically; pass `['_token' => 'x']` to test the failure. The response's
 is installed but not enabled. Without it the database tests are skipped (set
 `DB_TEST_CONNECTION` to a throwaway connection to run them elsewhere).
 
+## Performance
+
+Every response carries an `X-Response-Time` header, and with `APP_DEBUG=true`
+the layout footer prints the render time, memory and query count. Two console
+commands measure the framework:
+
+```bash
+php -d opcache.enable_cli=1 console.php bench                 # in-process: routing, queries, views, full requests
+php console.php bench:http http://localhost/myapp/ --requests=1000 --concurrency=10   # end to end over HTTP (add --ab for ApacheBench)
+```
+
+Reference numbers and methodology are in `docs/performance.html`. A measured
+comparison against Laravel, Symfony and plain PHP on the same machine, with a
+setup script to reproduce it, lives in `docs/comparison.html` and `benchmarks/`:
+
+```bash
+bash benchmarks/setup.sh /path/to/bench          # installs Laravel + Symfony with the same routes
+php console.php bench:compare comfree=http://localhost/app/ laravel=http://localhost/bench/laravel/public/bench/page
+```
+
 ## Production checklist
 
 - `APP_DEBUG=false`, `APP_ENV=production`, a real `APP_KEY`.

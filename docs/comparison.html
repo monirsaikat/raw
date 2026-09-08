@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparison · ComfreePHP Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">C</span>ComfreePHP <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Comparison with other frameworks</h1>
+            <p class="lead">ComfreePHP, Laravel 13, Symfony 7.4 and plain PHP serving the same two endpoints from the same Apache, the same PHP 8.3 and the same OPcache, measured on 8 September 2026. Every number on this page comes from one script and one console command that you can run yourself.</p>
+
+            <h2>The short version</h2>
+            <!-- @@summary@@ -->
+
+            <h2>What was measured</h2>
+            <p>Two endpoints that every web framework has to serve, implemented as idiomatically as possible in each one:</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Endpoint</th><th>ComfreePHP</th><th>Laravel</th><th>Symfony</th><th>Plain PHP</th></tr>
+                <tr><td><strong>Page</strong>: layout with navigation, a loop over four items, a form carrying a CSRF token, a session</td><td><code>/</code> (the real home page: Smarty layout, Bootstrap markup, alerts, footer)</td><td><code>/bench/page</code> through the <code>web</code> middleware group, Blade</td><td><code>/bench/page</code> with Twig and <code>csrf_token()</code></td><td><code>page.php</code> with <code>session_start()</code></td></tr>
+                <tr><td><strong>JSON</strong>: <code>{"pong": true, "time": "…"}</code></td><td><code>/api/ping</code> (also reports the current user, which is <code>null</code>)</td><td><code>/bench/json</code>, registered outside every middleware group</td><td><code>/bench/json</code></td><td><code>json.php</code></td></tr>
+            </table>
+            </div>
+            <p>All four run in production mode: <code>APP_DEBUG=false</code>, Laravel after <code>artisan optimize</code> (config, routes, views and events cached, file sessions), Symfony with <code>APP_ENV=prod</code>, an optimised authoritative class map and a warmed cache, ComfreePHP with its default settings and <em>without</em> a route cache. Nothing touches a database. The full source of the other frameworks' routes and templates is in the <code>benchmarks/</code> folder of the repository.</p>
+
+            <h2>Results</h2>
+            <p>1000 requests with 10 concurrent clients, three runs per target with the targets alternated between runs, median reported. Latency percentiles are per request as seen by the client. "Relative" is throughput as a share of the fastest target.</p>
+
+            <h3>Page, 10 concurrent clients</h3>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Target</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Failed</th><th>Relative</th></tr>
+<!-- @@page-c10@@ -->
+            </table>
+            </div>
+            <p>ComfreePHP's page is the framework's real home page (6.2 KB of Bootstrap markup with a navigation bar, alerts include and footer); the other three render a minimal 2.2 KB page with the same data. That makes this row conservative for ComfreePHP.</p>
+
+            <h3>JSON, 10 concurrent clients</h3>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Target</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Failed</th><th>Relative</th></tr>
+<!-- @@json-c10@@ -->
+            </table>
+            </div>
+
+            <h3>Single client: pure per-request latency</h3>
+            <p>300 requests, one at a time, so the numbers are what one request costs end to end with nothing else in flight.</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Page</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Failed</th><th>Relative</th></tr>
+<!-- @@page-c1@@ -->
+            </table>
+            </div>
+            <div class="table-wrap">
+            <table>
+                <tr><th>JSON</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Failed</th><th>Relative</th></tr>
+<!-- @@json-c1@@ -->
+            </table>
+            </div>
+
+            <h3>Footprint of one request</h3>
+            <p>Reported by an endpoint in each application that returns <code>count(get_included_files())</code> and <code>memory_get_peak_usage()</code> after the framework has booted and routed the request.</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Target</th><th>Version</th><th>PHP files loaded</th><th>Peak memory</th></tr>
+<!-- @@footprint@@ -->
+            </table>
+            </div>
+
+            <h3>Cross-check with ApacheBench</h3>
+            <p>The tables above use the built-in curl client of <code>bench:compare</code>. Running the same comparison with <code>--ab</code> (ApacheBench 2.4.58) ranks the four targets in the same order; the absolute numbers are lower because ab on Windows is slower than the servers it is measuring and does not keep connections alive.</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>ApacheBench, 10 concurrent</th><th>Page req/s</th><th>Page median</th><th>JSON req/s</th><th>JSON median</th></tr>
+<!-- @@ab-crosscheck@@ -->
+            </table>
+            </div>
+
+            <h2>Environment</h2>
+            <ul>
+                <li>AMD Ryzen 7 5700G (8 cores, 16 threads), Windows 11 Enterprise, Windows Defender real-time protection on.</li>
+                <li>Apache 2.4.58 (mpm_winnt) with PHP 8.3.31 ZTS as a module, one Apache for all four applications, subdirectories with the frameworks' own <code>.htaccess</code> rewrite rules.</li>
+                <li>OPcache enabled with the XAMPP defaults: 128 MB, <code>validate_timestamps=1</code>, <code>revalidate_freq=2</code>, JIT buffer 0. All four applications fully cached (verified with <code>opcache_get_status()</code>, see below).</li>
+                <li>Laravel 13.30.1 (<code>composer create-project laravel/laravel</code>), Symfony 7.4.18 (<code>symfony/skeleton</code> plus <code>twig</code>, <code>security-csrf</code> and <code>apache-pack</code>), ComfreePHP at the commit this page ships with.</li>
+                <li>Load generated on the same machine, so the client competes with the server for CPU. That lowers every number equally and compresses the gap between the fastest targets; a separate client machine would widen it.</li>
+            </ul>
+
+            <h2>Reading the numbers honestly</h2>
+            <ul>
+                <li><strong>This measures framework overhead, not applications.</strong> A real page spends most of its time in the database and the network, where all four are equal. The overhead matters when you serve many small requests, run on small hardware, or pay per CPU second.</li>
+                <li><strong>Every page request writes a session file</strong> in all four applications, because every request from the load client is a new visitor. On Windows with real-time antivirus scanning that write costs several milliseconds and is the floor under the page numbers. ComfreePHP's JSON endpoint writes nothing because a request without a session cookie never starts a session; Laravel's is registered outside the session middleware and Symfony's sessions are lazy, so the JSON rows compare framework bootstrap and routing alone.</li>
+                <li><strong>Laravel's page goes through its full <code>web</code> stack</strong> (cookie encryption, session, CSRF verification, view rendering), which is what a Laravel page does in production. Symfony's stateless CSRF tokens change length between responses, which makes ApacheBench report "failed" requests; <code>bench:compare</code> subtracts those, and the curl client never counted them.</li>
+                <li><strong>Windows numbers are lower than Linux numbers</strong> for everyone: process-per-thread PHP, slower file I/O, antivirus scanning. Rankings on Linux are the same in our experience, with a larger absolute gap; run the script there to see your own.</li>
+                <li><strong>Feature breadth is not measured.</strong> Laravel and Symfony ship far more (queues, mail, an ORM with migrations for every database, a huge package ecosystem). ComfreePHP covers the core a typical application uses and stays small on purpose; that is where its speed comes from.</li>
+            </ul>
+
+            <div class="warn">
+                <p><strong>The OPcache trap.</strong> Our first run had every framework losing: the XAMPP default OPcache (128 MB) was full from other projects on the same machine, so none of the four applications was actually cached and PHP recompiled hundreds of files on every request. Symfony, whose compiled container is one very large file, suffered most. Before you trust any PHP benchmark, check <code>opcache_get_status()['cache_full']</code> is <code>false</code> and <code>opcache_is_script_cached()</code> returns <code>true</code> for the framework's core files, or raise <code>opcache.memory_consumption</code> and <code>opcache.max_accelerated_files</code> in <code>php.ini</code>.</p>
+            </div>
+
+            <h2>Reproduce it</h2>
+            <p>The <code>benchmarks/</code> folder holds the routes, controllers and templates for Laravel and Symfony, the plain-PHP baseline, and a setup script that installs both frameworks with Composer, switches them to production mode and warms their caches:</p>
+<pre><code class="language-bash">bash benchmarks/setup.sh /var/www/bench        # or C:/xampp/htdocs/bench
+
+php console.php bench:compare \
+    comfree=http://localhost/app/ \
+    laravel=http://localhost/bench/laravel/public/bench/page \
+    symfony=http://localhost/bench/symfony/public/bench/page \
+    raw=http://localhost/bench/raw/page.php \
+    --requests=1000 --concurrency=10 --runs=3
+
+php console.php bench:compare \
+    comfree=http://localhost/app/api/ping \
+    laravel=http://localhost/bench/laravel/public/bench/json \
+    symfony=http://localhost/bench/symfony/public/bench/json \
+    raw=http://localhost/bench/raw/json.php \
+    --requests=1000 --concurrency=10 --runs=3</code></pre>
+            <p><code>bench:compare</code> warms every target, then hits them in alternating rounds so that background noise lands on all of them equally, and prints the median of the runs with 50th, 95th and 99th percentile latency, failures, response size and relative throughput. Add <code>--concurrency=1</code> for pure latency, <code>--ab</code> to measure with ApacheBench instead of the built-in client, and <code>--json</code> for machine-readable output. Any set of <code>name=url</code> pairs works, so the same command compares two versions of your own application or two servers.</p>
+            <p>Footprint numbers come from <code>/bench/info</code> in the Laravel and Symfony applications and <code>info.php</code> in the plain-PHP baseline; add an equivalent route to your ComfreePHP application while measuring:</p>
+<pre><code class="language-php">get('/bench/info', fn () =&gt; json([
+    'included_files' =&gt; count(get_included_files()),
+    'peak_memory_mb' =&gt; round(memory_get_peak_usage() / 1048576, 1),
+]));</code></pre>
+
+            <div class="note">
+                <p>Publishing your own results? Include the hardware, the OS, the PHP and framework versions, the OPcache settings, whether the client ran on the same machine, and the exact commands. A number without those is not a benchmark.</p>
+            </div>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>
