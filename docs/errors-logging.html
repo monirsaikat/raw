@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Errors and logging · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Errors and logging</h1>
+            <p class="lead">Every PHP warning becomes an exception, every uncaught exception becomes a proper response, and 5xx errors are written to a daily log file.</p>
+
+            <h2>PHP errors</h2>
+            <p>Bootstrap installs an error handler that throws <code>ErrorException</code> for warnings and notices, so a typo or an undefined key stops the request instead of printing into the page. The <code>@</code> operator still silences a call. Deprecations are logged at <code>notice</code> level rather than thrown. Fatal errors are caught at shutdown and rendered like any other exception.</p>
+
+            <h2>Stopping a request</h2>
+<pre><code class="language-php">abort(404);
+abort(403, 'Members only');
+abort(503, 'Down for maintenance', ['Retry-After' => '600']);
+abort_if($order->paid, 409, 'Already paid');
+abort_unless(auth_check(), 401);</code></pre>
+            <p>These throw <code>HttpException</code> with a status, an optional message shown to the user, and optional headers. Other exception types the framework raises:</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Exception</th><th>Status</th><th>Raised by</th></tr>
+                <tr><td><code>HttpException</code></td><td>any</td><td><code>abort()</code>, 404 and 405 from the router, 419 from CSRF, 429 from throttling</td></tr>
+                <tr><td><code>ValidationException</code></td><td>422</td><td><code>validated()</code>; carries <code>->errors</code> and <code>->input</code></td></tr>
+                <tr><td><code>AuthorizationException</code></td><td>403</td><td><code>authorize()</code>, the <code>can:</code> middleware</td></tr>
+                <tr><td><code>QueryException</code></td><td>500</td><td>A failed SQL statement; message includes the SQL with bindings</td></tr>
+                <tr><td><code>ContainerException</code></td><td>500</td><td>An unresolvable dependency</td></tr>
+            </table>
+            </div>
+
+            <h2>How exceptions are rendered</h2>
+            <ol>
+                <li>Any output buffered so far is discarded.</li>
+                <li>A 5xx exception is logged with its stack trace.</li>
+                <li>A <code>ValidationException</code> becomes a redirect back with <code>errors</code> and <code>old</code> flashed, or a 422 JSON payload for JSON clients.</li>
+                <li>If the client wants JSON (<code>Accept: application/json</code> or a JSON body), the response is <code>{"message": "..."}</code>. In debug mode a 5xx payload also carries the exception class, file, line and trace.</li>
+                <li>In debug mode a 5xx renders the debug page: the exception chain, a code excerpt around each frame's line, the stack trace without argument values (so credentials never reach the browser), request facts and the SQL log.</li>
+                <li>Otherwise <code>views/errors/{status}.tpl</code> if it exists, else <code>views/errors/error.tpl</code>, with <code>$status</code>, <code>$title</code> and <code>$message</code>. Messages of non-HTTP exceptions are never shown outside debug mode.</li>
+            </ol>
+            <p>The status line is sent explicitly, so non-standard codes such as 419 survive Apache.</p>
+
+            <h2>Custom error pages</h2>
+            <p>Create <code>views/errors/404.tpl</code>, <code>views/errors/403.tpl</code>, and so on. They are standalone templates (no layout) so they work even when the layout's data is unavailable; you can still <code>{extends}</code> the layout if you prefer.</p>
+
+            <h2>Logging</h2>
+<pre><code class="language-php">log_info('User {id} logged in', ['id' => $user->id]);
+log_warning('Slow import', ['rows' => $count, 'seconds' => $elapsed]);
+log_error('Payment failed', ['order' => $order->id, 'exception' => $e]);
+log_debug(...);   log_notice(...);   log_critical(...);   log_message('alert', ...);
+log_exception($e);</code></pre>
+            <p>Lines go to <code>storage/logs/app-YYYY-MM-DD.log</code> as <code>[time] env.LEVEL: message {context as JSON}</code>. Placeholders in braces are replaced from the context; the rest of the context is appended as JSON. <code>LOG_LEVEL</code> is the lowest level written (<code>debug</code>, <code>info</code>, <code>notice</code>, <code>warning</code>, <code>error</code>, <code>critical</code>, <code>alert</code>, <code>emergency</code>). If the directory is not writable the line falls back to PHP's <code>error_log()</code>.</p>
+
+            <h2>Query logging</h2>
+            <p>With <code>APP_DEBUG=true</code> or <code>DB_LOG_QUERIES=true</code> every query is kept in memory for the debug page. <code>DB_SLOW_QUERY_MS=200</code> writes a warning for anything slower. See <a href="database.html">Database</a>.</p>
+
+            <h2>Debugging helpers</h2>
+<pre><code class="language-php">dump($value, $other);      // pretty output (HTML in the browser, var_dump in the CLI)
+dd($value);                // dump and stop
+Post::where(...)->dd();    // the SQL with bindings substituted</code></pre>
+
+            <h2>Console and tests</h2>
+            <p>In the CLI an uncaught exception prints its class, message and location (plus the trace in debug mode) and exits with status 1. The test runner catches exceptions per test and reports them as failures; the HTTP test client stores an action's exception on the response (<code>$response->exception</code>).</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

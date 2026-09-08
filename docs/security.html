@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Security</h1>
+            <p class="lead">What the framework does for you, what it expects from you, and the switches involved.</p>
+
+            <h2>CSRF</h2>
+            <p>The global <code>csrf</code> middleware rejects any POST, PUT, PATCH or DELETE request that lacks the session's token, answering 419. Forms include it with <code>{csrf_field}</code>; JavaScript reads it from <code>{csrf_meta}</code> and sends the <code>X-CSRF-TOKEN</code> header.</p>
+<pre><code class="language-smarty">&lt;form method="post" action="{navigate name='contact.store'}">
+    {csrf_field}
+    ...
+&lt;/form></code></pre>
+<pre><code class="language-php">fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content } })</code></pre>
+            <p>To exempt a pure API, run it in its own entry point or replace the global list with <code>global_middleware([])</code> and protect it with tokens instead. Cookies use <code>SameSite=Lax</code> as a second layer.</p>
+
+            <h2>Response headers and CSP</h2>
+            <p><code>config/security.php</code> controls the headers sent on every response: <code>X-Content-Type-Options</code>, <code>X-Frame-Options</code>, <code>Referrer-Policy</code>, <code>Permissions-Policy</code> and a Content-Security-Policy that allows only same-origin scripts, styles, images and fonts. That is why Bootstrap is self-hosted. Inline scripts need the per-request nonce:</p>
+<pre><code class="language-smarty">&lt;script nonce="{csp_nonce}">...&lt;/script></code></pre>
+            <p>Edit the directives in the config to allow additional origins. <code>HSTS_ENABLED=true</code> sends <code>Strict-Transport-Security</code> on HTTPS responses; enable it only once the site is served exclusively over TLS, because browsers remember it for a year. <code>X-Powered-By</code> is removed.</p>
+
+            <h2>Sessions and cookies</h2>
+            <ul>
+                <li>Session cookies are <code>HttpOnly</code>, <code>SameSite=Lax</code>, and <code>Secure</code> on HTTPS (or always, with <code>SESSION_SECURE_COOKIE=true</code>).</li>
+                <li>PHP strict mode is on, so a session ID chosen by the client is never accepted.</li>
+                <li>The ID is regenerated on login, logout and remember-me login, which prevents session fixation.</li>
+                <li>Idle sessions expire after <code>SESSION_LIFETIME</code> minutes.</li>
+            </ul>
+
+            <h2>Passwords and login</h2>
+            <ul>
+                <li>Passwords are hashed with <code>password_hash()</code> and re-hashed on login when the algorithm defaults change.</li>
+                <li>An unknown email is verified against a dummy hash so a login attempt takes the same time either way.</li>
+                <li>Login and registration are throttled per IP (<code>throttle:5,1</code>); adjust in <code>routes/web.php</code>.</li>
+                <li>Remember-me cookies hold a random token; only its HMAC (keyed with <code>APP_KEY</code>) is stored, so a leaked database cannot forge cookies. Logging out invalidates the token.</li>
+            </ul>
+
+            <h2>Input and output</h2>
+            <ul>
+                <li><code>input()</code> and <code>request()</code> never include cookies, unlike <code>$_REQUEST</code>.</li>
+                <li><code>validated()</code> returns only the fields you declared; mass assignment is limited further by each model's <code>$fillable</code>.</li>
+                <li>Smarty escapes every <code>{$variable}</code>; only <code>|raw</code> output is unescaped.</li>
+                <li>Redirects from <code>back()</code> and <code>auth_intended()</code> only follow same-host URLs (<code>url_is_local()</code>), closing open-redirect holes.</li>
+                <li><code>request_host()</code> rejects header-injected values.</li>
+            </ul>
+
+            <h2>Database</h2>
+            <ul>
+                <li>Every value is bound; the raw helpers take bindings only.</li>
+                <li>Table and column names are validated against a strict pattern, so a user-supplied sort column cannot inject SQL. Operators and directions are whitelisted.</li>
+                <li>A failed connection is rethrown without the original exception, whose trace would contain the password.</li>
+            </ul>
+
+            <h2>Secrets and files</h2>
+            <ul>
+                <li>Secrets live in <code>.env</code>, which is git-ignored and blocked by <code>.htaccess</code>. <code>.env.example</code> holds placeholders.</li>
+                <li>The debug page never prints function arguments from stack traces.</li>
+                <li>Every directory except <code>assets/</code> and <code>docs/</code> denies web access through its own <code>.htaccess</code>.</li>
+                <li>Uploaded files should be moved outside the web root or into a directory that never executes PHP.</li>
+            </ul>
+
+            <h2>Authorization</h2>
+            <p>Protect actions with policies and gates rather than ad-hoc checks, and put <code>auth</code> before <code>can:</code> in route middleware. A policy method is never called for a guest unless its first parameter is nullable. See <a href="authorization.html">Authorization</a>.</p>
+
+            <h2>Checklist for production</h2>
+            <ul>
+                <li><code>APP_DEBUG=false</code>, <code>APP_ENV=production</code>, a generated <code>APP_KEY</code>.</li>
+                <li>HTTPS everywhere, then <code>HSTS_ENABLED=true</code>.</li>
+                <li><code>storage/</code> writable by the web server, everything else read-only.</li>
+                <li>Review <code>config/security.php</code> if you add third-party scripts or fonts.</li>
+                <li>Keep PHP and MariaDB updated; the framework has no other dependencies to track.</li>
+            </ul>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

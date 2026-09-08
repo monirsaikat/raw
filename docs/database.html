@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Database and queries · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Database and queries</h1>
+            <p class="lead">Named PDO connections, a fluent query builder that validates identifiers and binds every value, collections, pagination and a date value type.</p>
+
+            <h2>Connections</h2>
+            <p><code>config/database.php</code> declares connections and the default one (<code>DB_CONNECTION</code>):</p>
+<pre><code class="language-php">'default' => env('DB_CONNECTION', 'mysql'),
+'connections' => [
+    'mysql'   => ['driver' => 'mysql', 'host' => ..., 'database' => ..., 'username' => ..., 'password' => ..., 'charset' => 'utf8mb4'],
+    'sqlite'  => ['driver' => 'sqlite', 'database' => 'storage/database.sqlite'],   // relative to the project root
+    'testing' => ['driver' => 'sqlite', 'database' => ':memory:'],
+],</code></pre>
+<pre><code class="language-php">Database::connection();               // default Connection, opened lazily
+Database::connection('sqlite');       // another one
+Database::addConnection('reports', ['driver' => 'mysql', ...]);   // at runtime
+Database::purge('reports');           // close and forget</code></pre>
+            <p>Supported drivers are <code>mysql</code> (MySQL and MariaDB) and <code>sqlite</code>. A failed connection throws a <code>RuntimeException</code> whose stack trace never includes the password.</p>
+
+            <h2>Raw queries</h2>
+            <p>The static <code>Database</code> helpers use the default connection; a <code>Connection</code> object offers the same methods.</p>
+<pre><code class="language-php">Database::select('SELECT * FROM users WHERE active = ?', [1]);          // array of rows
+Database::selectOne('SELECT * FROM users WHERE id = ?', [$id]);          // row or null
+Database::scalar('SELECT COUNT(*) FROM users');                          // first column of the first row
+Database::insert('INSERT INTO tags (name) VALUES (?)', ['php']);         // last insert id
+Database::update('UPDATE users SET active = ? WHERE id = ?', [0, $id]); // affected rows
+Database::delete('DELETE FROM sessions WHERE expires_at &lt; ?', [now()]);
+Database::statement('ALTER TABLE users ADD INDEX ...');
+Database::unprepared('CREATE TABLE ...');                               // no prepared statement
+
+foreach (Database::cursor('SELECT * FROM logs') as $row) { ... }         // streamed, one row at a time</code></pre>
+            <p>Bindings are typed: integers bind as integers, booleans as 0/1, <code>DateTimeInterface</code> objects as <code>Y-m-d H:i:s</code> strings. Never interpolate request data into the SQL string; every raw helper takes bindings only.</p>
+
+            <h2>Transactions</h2>
+<pre><code class="language-php">Database::transaction(function () {
+    $order = Order::create([...]);
+    $order->items()->createMany($items);
+});                                            // commits, or rolls back and rethrows
+
+Database::transaction(fn () => ..., attempts: 3);   // retries on deadlock
+
+Database::transaction(function () {
+    Database::transaction(fn () => ...);       // nested → SAVEPOINT; the inner one can roll back alone
+});
+
+Database::beginTransaction();  Database::commit();  Database::rollBack();  Database::transactionLevel();</code></pre>
+
+            <h2>Errors and logging</h2>
+            <p>A failed statement throws <code>QueryException</code>; its message contains the SQL with bindings interpolated, and <code>->sql</code>, <code>->bindings</code> and <code>->sqlState()</code> are available. With <code>APP_DEBUG=true</code> (or <code>DB_LOG_QUERIES=true</code>) every query is kept in a log that the debug page shows. <code>DB_SLOW_QUERY_MS</code> logs slower queries as warnings. <code>Database::listen(fn ($sql, $bindings, $ms) => ...)</code> observes every query.</p>
+
+            <h2>The query builder</h2>
+            <p><code>Database::table('users')</code> starts a query; models start one with <code>Post::query()</code> or any forwarded static call. Column and table names are validated and quoted, operators are whitelisted, values are bound. Request data may be a value, never a column or operator.</p>
+
+            <h3>Selecting</h3>
+<pre><code class="language-php">Database::table('posts')->get();                                   // Collection of arrays
+Database::table('posts')->select('id', 'title')->get();
+Database::table('posts')->selectRaw('COUNT(*) AS n, status')->groupBy('status')->get();
+Database::table('users as u')->select('u.name')->distinct()->get();
+Database::table('users')
+    ->selectSub(fn ($q) => $q->from('posts')->selectRaw('COUNT(*)')->whereColumn('posts.user_id', 'users.id'), 'posts_count')
+    ->get();</code></pre>
+
+            <h3>Where clauses</h3>
+<pre><code class="language-php">->where('status', 'published')                 // =
+->where('views', '>=', 100)                    // =, &lt;, >, &lt;=, >=, &lt;>, !=, like, not like
+->where(['status' => 'published', 'featured' => 1])
+->where(fn ($q) => $q->where('a', 1)->orWhere('b', 2))     // parenthesised group
+->orWhere('author_id', $id)
+->whereNot('role', 'admin')
+->whereIn('id', [1, 2, 3])                      // an empty array matches nothing
+->whereIn('id', fn ($q) => $q->from('admins')->select('user_id'))   // sub-query
+->whereNotIn('id', [...])
+->whereNull('deleted_at')  ->whereNotNull('published_at')
+->whereBetween('price', [10, 20])  ->whereNotBetween(...)
+->whereLike('name', 'A%')  ->whereNotLike(...)  ->orWhereLike(...)
+->whereColumn('updated_at', '>', 'created_at')
+->whereDate('created_at', '2026-09-07')  ->whereYear('created_at', 2026)  ->whereMonth(...)  ->whereDay(...)
+->whereExists(fn ($q) => $q->from('logins')->whereColumn('logins.user_id', 'users.id'))
+->whereRaw('YEAR(created_at) = ?', [2026])      // trusted SQL only</code></pre>
+            <p>Passing <code>null</code> as the value produces <code>IS NULL</code> (or <code>IS NOT NULL</code> with <code>!=</code>). Comparing against a <code>QueryBuilder</code> or closure produces a sub-select.</p>
+
+            <h3>Joins, grouping, ordering</h3>
+<pre><code class="language-php">->join('users', 'users.id', '=', 'posts.user_id')
+->leftJoin('profiles', function (JoinClause $join) {
+    $join->on('users.id', '=', 'profiles.user_id')->where('profiles.active', 1);
+})
+->crossJoin('settings')
+->groupBy('status')->having('n', '>', 5)->havingRaw('COUNT(*) > ?', [2])
+->orderBy('created_at', 'desc')  ->orderByDesc('id')  ->latest()  ->oldest()  ->inRandomOrder()  ->reorder()
+->limit(10)->offset(20)  ->take(10)->skip(20)  ->forPage(3, 10)
+->lockForUpdate()  ->sharedLock()
+->union($other)  ->unionAll(fn ($q) => $q->from('archive'))
+->when($search, fn ($q, $term) => $q->whereLike('title', "%$term%"))
+->unless($includeDrafts, fn ($q) => $q->where('published', 1))</code></pre>
+
+            <h3>Reading</h3>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Method</th><th>Returns</th></tr>
+                <tr><td><code>get()</code></td><td><code>Collection</code> of rows (arrays) or models</td></tr>
+                <tr><td><code>first()</code>, <code>firstOrFail()</code>, <code>firstOr(fn)</code>, <code>sole()</code></td><td>One row; 404, callback result, or exception when none/many</td></tr>
+                <tr><td><code>find($id)</code>, <code>findMany([...])</code>, <code>findOrFail($id)</code></td><td>By primary key</td></tr>
+                <tr><td><code>value('name')</code>, <code>pluck('name')</code>, <code>pluck('name', 'id')</code></td><td>A single value; a collection of values, optionally keyed</td></tr>
+                <tr><td><code>count()</code>, <code>sum()</code>, <code>avg()</code>, <code>min()</code>, <code>max()</code>, <code>exists()</code>, <code>doesntExist()</code></td><td>Aggregates</td></tr>
+                <tr><td><code>chunk(200, fn ($rows, $page))</code>, <code>chunkById()</code>, <code>each(fn)</code></td><td>Process large sets in pages; return <code>false</code> to stop</td></tr>
+                <tr><td><code>cursor()</code></td><td>Generator yielding one row/model at a time</td></tr>
+                <tr><td><code>paginate(15)</code>, <code>simplePaginate(15)</code></td><td><code>Paginator</code></td></tr>
+                <tr><td><code>toSql()</code>, <code>getBindings()</code>, <code>toRawSql()</code>, <code>dd()</code></td><td>Inspect the query</td></tr>
+            </table>
+            </div>
+
+            <h3>Writing</h3>
+<pre><code class="language-php">Database::table('tags')->insert(['name' => 'php']);
+Database::table('tags')->insert([['name' => 'a'], ['name' => 'b']]);        // multiple rows
+$id = Database::table('tags')->insertGetId(['name' => 'sql']);
+Database::table('tags')->insertOrIgnore([...]);
+Database::table('tags')->upsert([['name' => 'x', 'hits' => 1]], 'name', ['hits']);   // insert or update on conflict
+Database::table('posts')->where('id', 3)->update(['title' => 'New']);
+Database::table('posts')->updateOrInsert(['slug' => 'a'], ['title' => 'A']);
+Database::table('posts')->where('id', 3)->increment('views');  ->decrement('stock', 2);
+Database::table('posts')->where('id', 3)->delete();
+Database::table('logs')->truncate();</code></pre>
+            <p><code>Database::raw('NOW()')</code> marks a trusted fragment that is inserted verbatim instead of bound.</p>
+
+            <h2>Collections</h2>
+            <p>Every <code>get()</code> returns a <code>Collection</code>: iterable, countable, array-accessible and JSON-serialisable, with a fluent API. <code>collect([...])</code> builds one from an array.</p>
+<pre><code class="language-php">$users->pluck('email');                          $users->pluck('name', 'id');
+$users->keyBy('id');                             $users->groupBy('team.name');
+$users->where('active', true)->sortBy('name');   $users->first(fn ($u) => $u->id > 5);
+$users->map(fn ($u) => $u->email)->unique();     $users->filter()->values();
+$users->sum('balance');  ->avg()  ->max()  ->count()  ->isEmpty()
+$users->chunk(50);  ->take(5);  ->skip(5);  ->reverse();  ->shuffle();  ->random()
+$users->contains('id', 3);  ->every(fn)  ->some(fn)  ->partition(fn)
+$users->toArray();  ->toJson();  ->each(fn)  ->tap(fn)  ->pipe(fn)  ->when($cond, fn)
+$posts->load('author');                          // eager load onto models already fetched</code></pre>
+            <p>Methods that read a key (<code>pluck</code>, <code>where</code>, <code>sortBy</code>, <code>groupBy</code>…) accept <code>dot.paths</code> and work on arrays, objects and models alike. Filtering methods preserve keys; call <code>values()</code> to reindex.</p>
+
+            <h2>Pagination</h2>
+<pre><code class="language-php">$posts = Post::latest()->paginate(20);             // reads ?page= from the query string
+$posts = Post::latest()->paginate(20, page: 3, pageName: 'p');
+$posts = Post::latest()->simplePaginate(20);      // no COUNT query, only "has more"</code></pre>
+<pre><code class="language-smarty">{foreach $posts as $post} ... {/foreach}
+{$posts->links()|raw}                             {* Bootstrap 5 pagination *}
+Showing {$posts->firstItem()}–{$posts->lastItem()} of {$posts->total()}</code></pre>
+            <p><code>Paginator</code> exposes <code>total()</code>, <code>perPage()</code>, <code>currentPage()</code>, <code>lastPage()</code>, <code>hasMorePages()</code>, <code>nextPageUrl()</code>, <code>previousPageUrl()</code>, <code>url($page)</code>, <code>appends([...])</code>, <code>withQueryString()</code>, <code>withPath()</code> and forwards collection methods to its items. Returned from an action it serialises to the usual <code>data / current_page / last_page / …</code> JSON shape.</p>
+
+            <h2>Dates</h2>
+            <p>Timestamp attributes and <code>now()</code> are <code>DateTimeValue</code> objects: immutable, printing as <code>Y-m-d H:i:s</code>, with helpers.</p>
+<pre><code class="language-php">now()->addDays(3);  ->subMinutes(5);  ->startOfDay();  ->endOfMonth();
+now()->diffForHumans();                      // "just now", "3 days ago", "in 2 hours"
+$post->created_at->toDateString();  ->format('d M Y');  ->isPast();  ->isToday();  ->diffInDays($other)
+DateTimeValue::parse('2026-09-07 10:00');    DateTimeValue::fromFormat('d/m/Y', '07/09/2026');
+today();</code></pre>
+
+            <h2>Identifier rules</h2>
+            <p>Table and column names must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, optionally qualified (<code>users.id</code>) or aliased (<code>users.name as author</code>). Anything else throws <code>InvalidArgumentException</code>, which is what stops a user-controlled sort column from becoming an injection. Order directions must be <code>asc</code> or <code>desc</code>.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

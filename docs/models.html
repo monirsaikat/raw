@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Models · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Models</h1>
+            <p class="lead">A model is a row with behaviour: attributes with casts and accessors, relationships, events, scopes and soft deletes. Any static call a model does not define is forwarded to its query builder.</p>
+
+            <h2>Defining a model</h2>
+<pre><code class="language-bash">php console.php make:model Post -mf     # model + migration + factory</code></pre>
+<pre><code class="language-php">&lt;?php
+
+class Post extends Model
+{
+    use SoftDeletes;
+
+    protected static string $table = 'posts';            // default: snake_case plural of the class name
+    protected static string $primaryKey = 'id';
+    protected static ?string $connection = null;         // a name from config/database.php
+    protected static bool $timestamps = true;            // created_at / updated_at
+
+    protected static array $fillable = ['title', 'body', 'meta', 'published_at'];
+    protected static array $guarded = ['id'];            // used only when $fillable is empty
+    protected static array $hidden = ['secret'];         // left out of toArray()/JSON
+    protected static array $visible = [];                // when set, only these are exposed
+    protected static array $appends = ['excerpt'];       // accessors included in toArray()
+    protected static array $casts = ['meta' => 'array', 'published_at' => 'datetime', 'views' => 'int'];
+    protected static array $with = ['author'];           // always eager loaded
+}</code></pre>
+
+            <h2>Retrieving</h2>
+<pre><code class="language-php">Post::all();                                     Post::find(1);   Post::findOrFail(1);   Post::findMany([1, 2]);
+Post::where('published', 1)->latest()->get();    Post::where('slug', $slug)->first();
+Post::count();   Post::exists();                 Post::paginate(20);   Post::chunk(100, fn ($posts) => ...);
+Post::withTrashed()->find(1);                    Post::on('sqlite')->get();          // another connection</code></pre>
+            <p>Everything on the <a href="database.html">query builder</a> is available; results are hydrated models in a <code>Collection</code>.</p>
+
+            <h2>Creating, updating, deleting</h2>
+<pre><code class="language-php">$post = Post::create(['title' => 'Hello', 'body' => '...']);   // only $fillable columns
+$post = Post::forceCreate([...]);                                // bypasses $fillable
+
+$post = new Post(['title' => 'Draft']);   $post->body = '...';   $post->save();
+$post->update(['title' => 'Renamed']);    $post->fill([...])->save();   $post->forceFill([...]);
+
+$post->delete();     $post->forceDelete();     $post->restore();          // soft deletes
+Post::destroy([1, 2, 3]);                                                // by key, firing events
+Post::where('published', 0)->delete();                                   // through the builder
+
+Post::firstOrCreate(['slug' => $slug], ['title' => 'New']);
+Post::firstOrNew([...], [...]);   Post::updateOrCreate([...], [...]);
+$post->increment('views');   $post->decrement('stock', 2);   $post->touch();
+$copy = $post->replicate();   $post->refresh();   $fresh = $post->fresh();</code></pre>
+            <p>Timestamps are set on insert and update. <code>save()</code> only writes attributes that changed, and skips the query entirely when nothing did.</p>
+
+            <h2>Attributes</h2>
+<pre><code class="language-php">$post->title;   $post['title'];   $post->getAttribute('title');   $post->getRawAttribute('meta');
+$post->title = 'X';   $post['title'] = 'X';   $post->setAttribute('title', 'X');
+isset($post->title);   $post->only(['id', 'title']);   $post->except(['body']);
+$post->getAttributes();                     // everything, raw</code></pre>
+
+            <h3>Casts</h3>
+            <p><code>int</code>/<code>integer</code>, <code>float</code>/<code>double</code>, <code>decimal:2</code>, <code>string</code>, <code>bool</code>/<code>boolean</code>, <code>array</code>/<code>json</code>, <code>object</code>, <code>collection</code>, <code>date</code>, <code>datetime</code>, <code>timestamp</code>. Casting works in both directions: an <code>array</code> cast stores JSON and returns an array; a <code>datetime</code> cast accepts strings or <code>DateTime</code> objects and returns a <code>DateTimeValue</code>. <code>created_at</code>, <code>updated_at</code> and <code>deleted_at</code> are cast to <code>datetime</code> automatically.</p>
+
+            <h3>Accessors and mutators</h3>
+<pre><code class="language-php">public function getExcerptAttribute(): string            // $post->excerpt
+{
+    return str_limit($this->attributes['body'] ?? '', 80);
+}
+
+public function setTitleAttribute($value): void          // $post->title = ' x '
+{
+    $this->attributes['title'] = trim($value);
+}</code></pre>
+            <p>List computed accessors in <code>$appends</code> to include them in <code>toArray()</code> and JSON.</p>
+
+            <h3>Change tracking</h3>
+<pre><code class="language-php">$post->isDirty();   $post->isDirty('title');   $post->isClean();   $post->getDirty();
+$post->getOriginal('title');   $post->wasChanged('title');   $post->getChanges();   // after save()
+$post->exists;   $post->wasRecentlyCreated;   $post->is($other);   $post->isNot($other);</code></pre>
+
+            <h2>Relationships</h2>
+<pre><code class="language-php">class User extends Model
+{
+    public function posts(): HasMany      { return $this->hasMany(Post::class); }            // posts.user_id
+    public function profile(): HasOne     { return $this->hasOne(Profile::class); }          // profiles.user_id
+}
+
+class Post extends Model
+{
+    public function author(): BelongsTo   { return $this->belongsTo(User::class); }          // posts.author_id (from the method name)
+    public function owner(): BelongsTo    { return $this->belongsTo(User::class, 'user_id'); } // explicit foreign key
+    public function tags(): BelongsToMany { return $this->belongsToMany(Tag::class)->withPivot('note')->withTimestamps(); }
+    public function comments(): HasMany   { return $this->hasMany(Comment::class); }
+}</code></pre>
+            <p>Defaults: <code>hasOne/hasMany</code> look for <code>&lt;parent&gt;_id</code> on the related table; <code>belongsTo</code> uses <code>&lt;method name&gt;_id</code> on this table; <code>belongsToMany</code> uses a pivot table named from both singular model names in alphabetical order (<code>post_tag</code>) with <code>post_id</code> and <code>tag_id</code>. Every key can be passed explicitly.</p>
+
+            <h3>Using relationships</h3>
+<pre><code class="language-php">$user->posts;                                   // Collection, loaded once and cached on the model
+$post->author;                                  // model or null
+$post->author->name;                            // in templates: {$post.author.name}
+
+$user->posts()->where('published', 1)->latest()->get();     // the relationship as a query
+$user->posts()->count();   $user->posts()->exists();   $user->posts()->paginate(10);
+
+$user->posts()->create(['title' => 'New']);     // sets user_id
+$user->posts()->createMany([...]);   $user->posts()->save($post);   $user->posts()->firstOrCreate([...]);
+$comment->post()->associate($post);   $comment->post()->dissociate();
+
+$post->tags()->attach($tag);   ->attach([1, 2]);   ->attach([3 => ['note' => 'x']]);
+$post->tags()->detach(2);      ->detach();
+$post->tags()->sync([1, 3]);   ->syncWithoutDetaching([...]);   ->toggle([2]);
+$post->tags()->updateExistingPivot($tagId, ['note' => 'y']);
+$tag->pivot->note;   $tag->pivot->created_at;</code></pre>
+
+            <h3>Eager loading</h3>
+            <p>Loading a relationship for a list of models one by one costs one query per model. <code>with()</code> loads it for all of them in a single extra query:</p>
+<pre><code class="language-php">Post::with('author', 'tags')->get();
+Post::with('comments.user')->get();                                     // nested
+Post::with(['comments' => fn ($q) => $q->where('approved', 1)->latest()])->get();
+$posts->load('tags');   $post->load('comments');   $post->loadMissing('author');</code></pre>
+            <p><code>protected static array $with</code> on the model eager loads every time. <code>without('author')</code> removes one for a query.</p>
+
+            <h3>Querying by relationship</h3>
+<pre><code class="language-php">Post::has('comments')->get();                                   // at least one
+Post::has('comments', '>=', 3)->get();
+Post::has('comments.replies')->get();                           // nested
+Post::doesntHave('tags')->get();
+Post::whereHas('comments', fn ($q) => $q->where('approved', 1))->get();
+Post::whereDoesntHave('comments', fn ($q) => $q->where('spam', 1))->get();
+Post::withCount('comments')->get();                             // ->comments_count
+Post::withCount(['comments as approved_count' => fn ($q) => $q->where('approved', 1)])->get();
+$post->loadCount('comments');</code></pre>
+
+            <h2>Scopes</h2>
+<pre><code class="language-php">// Local: Post::published()->get()
+public function scopePublished(QueryBuilder $query): void
+{
+    $query->whereNotNull('published_at');
+}
+
+// Global: applied to every query on the model
+protected static function boot(): void
+{
+    static::addGlobalScope('recent', fn (QueryBuilder $q) => $q->where('created_at', '>', '2020-01-01'));
+}
+
+Post::withoutGlobalScope('recent')->get();   Post::withoutGlobalScopes()->get();</code></pre>
+
+            <h2>Events</h2>
+            <p>Events: <code>retrieved</code>, <code>creating</code>, <code>created</code>, <code>updating</code>, <code>updated</code>, <code>saving</code>, <code>saved</code>, <code>deleting</code>, <code>deleted</code>, <code>restoring</code>, <code>restored</code>, <code>forceDeleting</code>, <code>forceDeleted</code>. Returning <code>false</code> from a <code>…ing</code> listener cancels the operation.</p>
+<pre><code class="language-php">protected static function boot(): void
+{
+    static::creating(fn (Post $post) => $post->slug ??= str_slug($post->title));
+    static::deleting(fn (Post $post) => $post->comments()->delete());
+}
+
+Post::listen('updated', fn (Post $post) => cache_forget('post.' . $post->id));
+Post::observe(PostObserver::class);          // an object with methods named after events
+
+Model::withoutEvents(fn () => Post::create([...]));
+$post->saveQuietly();</code></pre>
+
+            <h2>Soft deletes</h2>
+            <p>Add <code>use SoftDeletes;</code> and a nullable <code>deleted_at</code> column (<code>$table->softDeletes()</code>). <code>delete()</code> then stamps the row instead of removing it, and a global scope hides stamped rows everywhere.</p>
+<pre><code class="language-php">$post->delete();   $post->trashed();   $post->restore();   $post->forceDelete();
+Post::withTrashed()->get();   Post::onlyTrashed()->get();   Post::withoutTrashed()->get();
+Post::where('id', 3)->delete();          // soft-deletes through the builder too
+Post::where('id', 3)->forceDelete();</code></pre>
+
+            <h2>Serialisation</h2>
+<pre><code class="language-php">$post->toArray();       // attributes (cast, minus $hidden, plus $appends) and loaded relationships
+$post->toJson();        json_encode($post);        return $post;   // from an action → JSON response</code></pre>
+
+            <h2>Connections</h2>
+            <p>Set <code>protected static ?string $connection = 'reports';</code> or use <code>Post::on('reports')</code> for one query. Relationships and pivot operations follow the related model's connection.</p>
+
+            <h2>Factories</h2>
+            <p><code>Post::factory()->count(5)->create()</code> builds records for tests and seeders; see <a href="migrations.html#factories">Migrations and seeding</a>.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

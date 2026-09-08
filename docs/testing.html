@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Testing · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Testing</h1>
+            <p class="lead">A built-in runner with plain assertions, an in-process HTTP client that drives the real routes and views, and an in-memory SQLite database for anything that touches tables. No PHPUnit required.</p>
+
+            <h2>Writing tests</h2>
+            <p>Each file in <code>tests/</code> registers cases with <code>test()</code>. State (input, session, routes, container, gate, configuration) is reset before every case.</p>
+<pre><code class="language-php">&lt;?php
+
+test('slugs are lower-case and dashed', function () {
+    assert_same('hello-world', str_slug('Hello World!'));
+});
+
+test('unknown routes are 404', function () {
+    get('/only', fn () => 'ok');
+
+    $e = assert_throws(fn () => dispatch('GET', '/other'), HttpException::class);
+    assert_same(404, $e->status);
+});</code></pre>
+<pre><code class="language-bash">php console.php test              # all files
+php console.php test Router       # tests/RouterTest.php and anything else containing "Router"</code></pre>
+            <p>Output lists <code>ok</code>, <code>FAIL</code> (with the message and location) and <code>skip</code> per case, then a summary. The exit code is 1 when anything failed.</p>
+
+            <h2>Assertions</h2>
+            <p><code>assert_true</code>, <code>assert_false</code>, <code>assert_same</code> (strict), <code>assert_equals</code> (loose), <code>assert_null</code>, <code>assert_not_null</code>, <code>assert_contains</code>, <code>assert_not_contains</code>, <code>assert_matches</code> (regex), <code>assert_count</code>, <code>assert_key_exists</code>, <code>assert_instance_of</code>, <code>assert_throws($fn, $class, $messagePart)</code> (returns the exception), <code>fail($message)</code>, <code>skip($reason)</code>. Every assertion takes an optional message as its last argument.</p>
+
+            <h2>Hooks</h2>
+<pre><code class="language-php">before_each(function () { use_test_database(); http_use_app_routes(); Database::beginTransaction(); });
+after_each(fn () => Database::rollBack());</code></pre>
+            <p>Hooks apply to every test in the same file. <code>after_each</code> runs even when the test failed.</p>
+
+            <h2>The HTTP client</h2>
+            <p>Requests run in-process through the real middleware, controllers and templates. The session persists between calls like a browser cookie, flash data ages exactly as in production, and CSRF tokens are added automatically to unsafe requests.</p>
+<pre><code class="language-php">http_get('/posts?page=2', ['X-Requested-With' => 'XMLHttpRequest']);
+http_post('/posts', ['title' => 'Hello', 'body' => '...']);
+http_put('/posts/1', [...]);   http_patch(...);   http_delete('/posts/1');      // sent as POST + _method, like a form
+http_json('POST', '/api/posts', ['title' => 'Hello']);                          // JSON body, Accept: application/json
+http_request('GET', '/x', [], ['Referer' => '/y'], ['REMOTE_ADDR' => '10.0.0.1']);
+
+http_use_app_routes();          // load routes/web.php (tests start with no routes)
+acting_as($user);               // subsequent requests are authenticated; acting_as(null) logs out
+http_follow($response);         // follow local redirects with GET</code></pre>
+            <p>To test a CSRF failure pass <code>['_token' => 'wrong']</code>. Requests carry the previous request's URL as <code>Referer</code>, so <code>back()</code> behaves naturally.</p>
+
+            <h2>Response assertions</h2>
+            <p>Every request returns a <code>TestResponse</code>; assertions chain and fail with the status and any exception the action threw.</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Assertion</th><th>Checks</th></tr>
+                <tr><td><code>assertStatus(201)</code>, <code>assertOk()</code>, <code>assertCreated()</code>, <code>assertNotFound()</code>, <code>assertForbidden()</code>, <code>assertUnauthorized()</code>, <code>assertUnprocessable()</code>, <code>assertServerError()</code></td><td>Status code</td></tr>
+                <tr><td><code>assertRedirect()</code>, <code>assertRedirect('/login')</code>, <code>assertRedirectToRoute('login')</code>, <code>assertNoRedirect()</code></td><td>3xx and the target path (host and base path ignored)</td></tr>
+                <tr><td><code>assertSee()</code>, <code>assertDontSee()</code>, <code>assertSeeText()</code> (tags stripped), <code>assertSeeInOrder([...])</code></td><td>Body content</td></tr>
+                <tr><td><code>assertJson([...])</code> (subset), <code>assertExactJson()</code>, <code>assertJsonPath('user.name', 'Ann')</code>, <code>assertJsonMissing('user.password')</code>, <code>assertJsonCount(3, 'items')</code></td><td>JSON body</td></tr>
+                <tr><td><code>assertHeader('Content-Type', 'application/json; charset=utf-8')</code>, <code>assertHeaderMissing()</code></td><td>Headers</td></tr>
+                <tr><td><code>assertSessionHas('key', $value)</code>, <code>assertSessionMissing()</code></td><td>Session after the request</td></tr>
+                <tr><td><code>assertSessionHasErrors(['email'])</code>, <code>assertSessionHasErrors(['email' => 'The email must be a valid email address.'])</code>, <code>assertSessionHasNoErrors()</code>, <code>assertValid()</code>, <code>assertInvalid()</code></td><td>Validation errors flashed for the next request</td></tr>
+                <tr><td><code>assertAuthenticated($user)</code>, <code>assertGuest()</code></td><td>Login state</td></tr>
+            </table>
+            </div>
+            <p>Also available: <code>status()</code>, <code>body()</code>, <code>headers()</code>, <code>header($name)</code>, <code>json('path')</code>, <code>dump()</code>, and <code>->exception</code>.</p>
+
+            <h2>Database tests</h2>
+<pre><code class="language-php">before_each(function () {
+    use_test_database();            // in-memory SQLite with database/migrations applied
+    http_use_app_routes();
+    Database::beginTransaction();
+});
+after_each(fn () => Database::rollBack());
+
+test('the contact form stores a message', function () {
+    http_post('/contact', ['name' => 'Ann', 'email' => 'ann@example.com', 'message' => 'Hi'])
+        ->assertRedirect('/contact')
+        ->assertSessionHasNoErrors();
+
+    assert_database_has('messages', ['email' => 'ann@example.com']);
+    assert_database_count('messages', 1);
+    assert_database_missing('messages', ['email' => 'nobody@example.com']);
+});</code></pre>
+            <p><code>use_test_database()</code> registers a connection named <code>app_testing</code>, makes it the default and runs the migrations once per process. The transaction in the hooks isolates each test. Factories (<code>User::factory()->create()</code>) are the quickest way to seed rows.</p>
+            <p>If <code>pdo_sqlite</code> is not available the database tests are skipped rather than run against MySQL. The <code>test</code> command loads the extension automatically when the DLL or shared object exists; otherwise set <code>DB_TEST_CONNECTION</code> to a throwaway connection defined in <code>config/database.php</code>.</p>
+
+            <h2>Testing pieces in isolation</h2>
+<pre><code class="language-php">dispatch('GET', '/path');                                  // run the pipeline for a path, get the action's return value
+run_middleware(['throttle:2,1'], fn () => 'core');         // a middleware chain by itself
+render_exception(new HttpException(404));                  // the Response an exception would produce
+validate(['email' => 'x'], ['email' => 'required|email']); // the error array
+config_set('app.name', 'Test');                            // for this test only
+test_next_request();                                       // age flash data without an HTTP request
+app()->instance(Mailer::class, new FakeMailer());          // swap a service</code></pre>
+
+            <h2>The framework's own suite</h2>
+            <p><code>tests/</code> ships with about two hundred cases covering routing, middleware, validation, the query builder, models and relationships, the schema builder, sessions, caching, errors, the container, authorization, the HTTP client and the full application flow. They double as executable examples; <code>tests/AppFlowTest.php</code> is the best starting point for writing your own.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

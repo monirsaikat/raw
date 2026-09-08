@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Middleware · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Middleware</h1>
+            <p class="lead">Named handlers that wrap an action. Each receives <code>$next</code> and decides whether to call it, plus any parameters written after a colon in the route.</p>
+
+            <h2>Writing middleware</h2>
+<pre><code class="language-bash">php console.php make:middleware admin      # middleware/admin.php</code></pre>
+<pre><code class="language-php">&lt;?php
+
+middleware('admin', function (callable $next) {
+    abort_unless(auth_user()?->is_admin, 403);
+
+    return $next();
+});</code></pre>
+            <p>Every file in <code>middleware/</code> is loaded by bootstrap, so the handler is registered automatically. A handler returns either the result of <code>$next()</code> or its own response (a <code>Response</code>, a string, an array) to stop the request early. Throwing <code>abort()</code> works too.</p>
+
+            <h2>Parameters</h2>
+            <p>Text after a colon is split on commas and passed as extra arguments:</p>
+<pre><code class="language-php">middleware('role', function (callable $next, string ...$roles) {
+    abort_unless(in_array(auth_user()?->role, $roles, true), 403);
+
+    return $next();
+});
+
+get('/reports', 'ReportController@index', 'reports', ['auth', 'role:admin,editor']);</code></pre>
+
+            <h2>Class-based middleware</h2>
+            <p>Register a class name instead of a closure. The class is built by the <a href="container.html">container</a>, so it can declare dependencies, and its <code>handle()</code> method receives <code>$next</code> and the parameters:</p>
+<pre><code class="language-php">class LogRequests
+{
+    public function __construct(private Clock $clock)
+    {
+    }
+
+    public function handle(callable $next, string $channel = 'http')
+    {
+        log_info('{method} {path}', ['method' => request_method(), 'path' => request_path(), 'channel' => $channel]);
+
+        return $next();
+    }
+}
+
+middleware('log', LogRequests::class);</code></pre>
+
+            <h2>Attaching middleware</h2>
+<pre><code class="language-php">get('/account', 'AuthController@account', 'account', ['auth']);            // one route
+
+group(['middleware' => ['auth', 'can:admin']], function () { ... });      // every route in a group
+
+add_global_middleware('log');                                              // every route
+global_middleware(['csrf', 'log']);                                         // replace the global list</code></pre>
+            <p>Order: the global list first, then the group's middleware, then the route's own, outermost to innermost. <code>csrf</code> is global by default; removing it with <code>global_middleware([])</code> disables CSRF protection everywhere, so only do that for a pure API.</p>
+
+            <h2>Built-in middleware</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Name</th><th>Behaviour</th></tr>
+                <tr><td><code>csrf</code></td><td>Rejects POST/PUT/PATCH/DELETE requests without a valid <code>_token</code> field or <code>X-CSRF-TOKEN</code> header with a 419. Global by default.</td></tr>
+                <tr><td><code>auth</code></td><td>Requires a logged-in user. Guests are redirected to the login route (the requested URL is remembered for <code>auth_intended()</code>) or get a 401 JSON payload when they ask for JSON.</td></tr>
+                <tr><td><code>guest</code></td><td>Sends logged-in users to the home route; used on login and registration pages.</td></tr>
+                <tr><td><code>throttle:max,minutes</code></td><td>Allows <code>max</code> requests per client IP and route within the window, then answers 429 with <code>Retry-After</code>.</td></tr>
+                <tr><td><code>can:ability,arguments…</code></td><td>Authorizes the current user; see <a href="authorization.html">Authorization</a>. 403 on failure.</td></tr>
+            </table>
+            </div>
+
+            <h2>Order matters</h2>
+            <p>A login route usually lists <code>['guest', 'throttle:5,1']</code>: logged-in users are bounced home before their attempt counts. A protected page lists <code>['auth', 'can:update,Post@id']</code>: guests are sent to log in before any policy runs.</p>
+
+            <h2>Testing middleware</h2>
+<pre><code class="language-php">test('admin middleware blocks members', function () {
+    get('/admin', fn () => 'ok', null, ['admin']);
+
+    acting_as(User::factory()->create(['is_admin' => 0]));
+    http_get('/admin')->assertForbidden();
+
+    acting_as(User::factory()->create(['is_admin' => 1]));
+    http_get('/admin')->assertOk();
+});</code></pre>
+            <p>Middleware can also be exercised directly: <code>run_middleware(['role:admin'], fn () => 'core')</code> returns whatever the chain produces.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

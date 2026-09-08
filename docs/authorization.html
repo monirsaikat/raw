@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authorization · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Authorization</h1>
+            <p class="lead">Who may do what. Model abilities live in policies, everything else in gates; both are checked with the same helpers in controllers, templates and routes.</p>
+
+            <h2>Policies</h2>
+<pre><code class="language-bash">php console.php make:policy Post           # policies/PostPolicy.php</code></pre>
+<pre><code class="language-php">&lt;?php
+
+class PostPolicy
+{
+    // Optional. Runs first for every ability; true/false decides, null continues.
+    public function before(User $user, string $ability): ?bool
+    {
+        return $user->is_admin ? true : null;
+    }
+
+    public function viewAny(User $user): bool          { return true; }
+    public function view(?User $user, Post $post): bool { return $post->published || $user?->id === $post->user_id; }
+    public function create(User $user): bool           { return true; }
+    public function update(User $user, Post $post): bool { return $post->user_id === $user->id; }
+    public function delete(User $user, Post $post): bool { return $post->user_id === $user->id; }
+}</code></pre>
+            <p>A policy is found by name: <code>PostPolicy</code> for <code>Post</code>. Other pairings go in <code>config/auth.php</code> under <code>policies</code>, or <code>gate_policy(Post::class, ArticlePolicy::class)</code>. Policies are built by the <a href="container.html">container</a>, so their constructors may declare dependencies. The ability name maps to a method; <code>update-title</code> becomes <code>updateTitle()</code>.</p>
+
+            <h2>Gates</h2>
+            <p>Standalone abilities live in <code>policies/gates.php</code>:</p>
+<pre><code class="language-php">gate_define('admin', fn (User $user) => (bool) $user->is_admin);
+gate_define('view-dashboard', fn (?User $user) => $user !== null);
+gate_define('export', 'ExportRules@allowed');                        // Class@method, built by the container
+
+gate_before(fn (?User $user) => $user?->is_superuser ? true : null); // runs before everything
+gate_after(fn (?User $user, string $ability, ?bool $result) => ...);  // decides only when nothing else did</code></pre>
+
+            <h2>Checking</h2>
+<pre><code class="language-php">can('update', $post);   cannot('update', $post);   can_any(['update', 'delete'], $post);
+can('create', Post::class);                                   // class-level abilities
+can('admin');
+
+authorize('update', $post);                                   // throws AuthorizationException → 403
+abort_unless(can('update', $post), 403);                      // same thing, by hand
+
+$user->can('update', $post);   $user->cannot(...);   $user->canAny([...], $post);   // Authorizable trait
+gate()->forUser($other)->allows('update', $post);             // as another user
+gate()->forUser(null)->allows('view', $post);                 // as a guest</code></pre>
+<pre><code class="language-smarty">{if 'update'|can:$post}&lt;a href="{navigate name='posts.edit' id=$post.id}">Edit&lt;/a>{/if}
+{if 'delete'|cannot:$post}&lt;span class="text-muted">Locked&lt;/span>{/if}
+{if 'admin'|can}...{/if}</code></pre>
+
+            <h2>Route middleware</h2>
+<pre><code class="language-php">get('/admin', 'AdminController@index', 'admin', ['auth', 'can:admin']);
+get('/posts/{id}/edit', 'PostController@edit', 'posts.edit', ['auth', 'can:update,Post@id']);   // model from the route parameter
+get('/posts/create', 'PostController@create', 'posts.create', ['auth', 'can:create,Post']);     // class name
+get('/reports/{year}', 'ReportController@show', null, ['can:view-report,year']);               // raw parameter value</code></pre>
+            <p>Arguments after the ability: <code>Model@param</code> loads the record (404 when missing), a class name is passed as is, anything else is the named route parameter's value. Put <code>auth</code> before <code>can</code> so guests are sent to log in rather than receiving a 403.</p>
+
+            <h2>How a check is resolved</h2>
+            <ol>
+                <li>Each <code>gate_before()</code> callback runs; a non-null result is final.</li>
+                <li>If the first argument is a model instance or class with a policy: the policy's <code>before()</code> (if any), then the method named after the ability. A missing method denies.</li>
+                <li>Otherwise the gate definition with that name; no definition denies.</li>
+                <li><code>gate_after()</code> callbacks may decide when the result is still null.</li>
+            </ol>
+            <p><strong>Guests:</strong> a callback or policy method is only invoked for a guest when its first parameter is nullable (<code>?User $user</code>) or has no type. Otherwise the ability is denied without calling it, so policies never receive null by surprise.</p>
+
+            <h2>Handling denial</h2>
+            <p><code>AuthorizationException</code> is an <code>HttpException</code> with status 403. The error handler renders <code>views/errors/403.tpl</code> if it exists, else the generic error page, or a JSON <code>{"message": "This action is unauthorized."}</code> for JSON clients.</p>
+
+            <h2>Testing</h2>
+<pre><code class="language-php">test('only the author can edit', function () {
+    $post = Post::factory()->create();
+
+    assert_true($post->author->can('update', $post));
+    assert_false(User::factory()->create()->can('update', $post));
+
+    acting_as(User::factory()->create());
+    http_get('/posts/' . $post->id . '/edit')->assertForbidden();
+});</code></pre>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

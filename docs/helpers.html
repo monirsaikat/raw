@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helpers reference · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Helpers reference</h1>
+            <p class="lead">Every global function, grouped by area. Internal functions used only by the framework are omitted.</p>
+
+            <h2>Routing and URLs</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>get / post / put / patch / delete / any ($path, $action, $name, $middleware)</code></td><td>Register a route</td></tr>
+                <tr><td><code>route_map(array $methods, $path, $action, $name, $middleware)</code></td><td>Register for several verbs</td></tr>
+                <tr><td><code>group(array $attributes, callable $callback)</code></td><td>Prefix, middleware and name prefix for nested routes</td></tr>
+                <tr><td><code>route_url($name, $params)</code></td><td>Path for a named route</td></tr>
+                <tr><td><code>url($path)</code>, <code>app_url()</code>, <code>base_path()</code></td><td>Base-path-aware URL, absolute root URL, the sub-directory prefix</td></tr>
+                <tr><td><code>current_route()</code>, <code>current_route_name()</code>, <code>route_is(...$patterns)</code></td><td>The matched route</td></tr>
+                <tr><td><code>route_parameter($name, $default)</code>, <code>route_parameters()</code></td><td>Matched parameter values</td></tr>
+                <tr><td><code>dispatch($method, $path)</code></td><td>Run the pipeline and return the action result</td></tr>
+            </table></div>
+
+            <h2>Request</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>input($key, $default)</code>, <code>input()</code></td><td>Trimmed input (query + body, JSON merged), one key or all</td></tr>
+                <tr><td><code>request($key, $default)</code>, <code>query($key, $default)</code></td><td>Untrimmed input; query string only</td></tr>
+                <tr><td><code>input_only([...])</code>, <code>input_except([...])</code>, <code>has_input($key)</code></td><td>Subsets; presence with a non-empty value</td></tr>
+                <tr><td><code>request_file($key)</code></td><td>Uploaded file array or null</td></tr>
+                <tr><td><code>old($key, $default)</code></td><td>Input flashed by the previous request</td></tr>
+                <tr><td><code>request_method()</code>, <code>request_real_method()</code></td><td>Verb with and without <code>_method</code> spoofing</td></tr>
+                <tr><td><code>request_path()</code>, <code>request_uri()</code>, <code>request_url()</code>, <code>request_host()</code>, <code>request_ip()</code></td><td>Request facts</td></tr>
+                <tr><td><code>request_header($name, $default)</code>, <code>request_is_json()</code>, <code>request_is_ajax()</code>, <code>request_is_secure()</code>, <code>wants_json()</code></td><td>Headers and negotiation</td></tr>
+                <tr><td><code>request_body()</code>, <code>request_json()</code></td><td>Raw body; decoded JSON body</td></tr>
+            </table></div>
+
+            <h2>Response</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>response($body, $status, $headers)</code></td><td>A Response (arrays become JSON)</td></tr>
+                <tr><td><code>json($data, $status, $headers)</code></td><td>JSON response</td></tr>
+                <tr><td><code>redirect($url, $status)</code>, <code>redirect_route($name, $params, $status)</code>, <code>back($fallback, $status)</code></td><td>Redirects</td></tr>
+                <tr><td><code>back_with_errors($errors, $old)</code></td><td>Flash errors and input, then redirect back</td></tr>
+                <tr><td><code>abort($status, $message, $headers)</code>, <code>abort_if()</code>, <code>abort_unless()</code></td><td>Stop with an HTTP error</td></tr>
+                <tr><td><code>url_is_local($url)</code></td><td>Safe redirect target check</td></tr>
+                <tr><td><code>http_status_text($status)</code></td><td>Reason phrase</td></tr>
+            </table></div>
+
+            <h2>Views</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>view($template, $data)</code>, <code>view_exists($template)</code></td><td>Render <code>views/&lt;template&gt;.tpl</code></td></tr>
+                <tr><td><code>e($value)</code></td><td>HTML-escape outside templates</td></tr>
+                <tr><td><code>asset($path)</code></td><td>Versioned asset URL</td></tr>
+                <tr><td><code>csrf_token()</code>, <code>csrf_field()</code>, <code>csrf_meta()</code>, <code>csrf_verify($token)</code></td><td>CSRF helpers</td></tr>
+                <tr><td><code>method_field($method)</code>, <code>current_year()</code>, <code>csp_nonce()</code>, <code>navigate($params)</code></td><td>Template tags, also callable from PHP</td></tr>
+            </table></div>
+
+            <h2>Validation</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>validated($data, $rules, $messages)</code></td><td>Validate or throw; returns the declared fields</td></tr>
+                <tr><td><code>validate($data, $rules, $messages)</code></td><td>Returns the error array</td></tr>
+                <tr><td><code>validator_extend($name, $rule, $message)</code></td><td>Register a rule</td></tr>
+            </table></div>
+
+            <h2>Session, flash, cache, rate limiting</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>session_get / session_set / session_has / session_pull / session_forget / session_all / session_flush / session_regenerate / session_invalidate</code></td><td>Session data</td></tr>
+                <tr><td><code>flash($key, $value)</code>, <code>flash($key)</code>, <code>flash_now()</code>, <code>flash_has()</code>, <code>flash_all()</code>, <code>flash_keep()</code></td><td>Flash data</td></tr>
+                <tr><td><code>cache_get / cache_set / cache_has / cache_forget / cache_remember / cache_flush</code></td><td>File cache</td></tr>
+                <tr><td><code>rate_limit_attempt($key, $max, $seconds)</code>, <code>rate_limit_clear($key)</code></td><td>Counters behind the <code>throttle</code> middleware</td></tr>
+            </table></div>
+
+            <h2>Authentication and authorization</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>auth_user()</code>, <code>auth_id()</code>, <code>auth_check()</code>, <code>auth_guest()</code></td><td>Current user</td></tr>
+                <tr><td><code>auth_attempt($username, $password, $remember)</code>, <code>auth_login($user, $remember)</code>, <code>auth_logout()</code>, <code>auth_intended($default)</code></td><td>Login flow</td></tr>
+                <tr><td><code>can()</code>, <code>cannot()</code>, <code>can_any()</code>, <code>authorize()</code></td><td>Checks for the current user</td></tr>
+                <tr><td><code>gate()</code>, <code>gate_define()</code>, <code>gate_policy()</code>, <code>gate_before()</code>, <code>gate_after()</code></td><td>Gate configuration</td></tr>
+            </table></div>
+
+            <h2>Container and middleware</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>app()</code>, <code>app($abstract, $parameters)</code></td><td>The container; resolve something</td></tr>
+                <tr><td><code>middleware($name, $handler)</code>, <code>middleware_exists($name)</code></td><td>Register a middleware (closure or class)</td></tr>
+                <tr><td><code>global_middleware($set)</code>, <code>add_global_middleware(...$names)</code></td><td>The list applied to every route</td></tr>
+                <tr><td><code>run_middleware($specs, $destination)</code></td><td>Run a chain directly</td></tr>
+            </table></div>
+
+            <h2>Configuration, logging, errors</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>config($key, $default)</code>, <code>config_set($key, $value)</code>, <code>env($key, $default)</code></td><td>Settings</td></tr>
+                <tr><td><code>app_name()</code>, <code>is_debug()</code></td><td>Shortcuts</td></tr>
+                <tr><td><code>log_debug / log_info / log_notice / log_warning / log_error / log_critical ($message, $context)</code>, <code>log_message($level, ...)</code>, <code>log_exception($e)</code></td><td>Logging</td></tr>
+                <tr><td><code>dump(...$values)</code>, <code>dd(...$values)</code></td><td>Debug output</td></tr>
+            </table></div>
+
+            <h2>Strings, dates, collections, fake data</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>str_slug()</code>, <code>str_snake()</code>, <code>str_studly()</code>, <code>str_camel()</code>, <code>str_plural()</code>, <code>str_limit()</code>, <code>str_random()</code>, <code>class_basename()</code></td><td>String utilities</td></tr>
+                <tr><td><code>now()</code>, <code>today()</code></td><td><code>DateTimeValue</code> instances</td></tr>
+                <tr><td><code>collect($items)</code></td><td>A Collection</td></tr>
+                <tr><td><code>fake()</code></td><td>The fake-data generator</td></tr>
+            </table></div>
+
+            <h2>Testing (available in test runs)</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>test($name, $callback)</code>, <code>before_each()</code>, <code>after_each()</code>, <code>skip()</code>, <code>fail()</code></td><td>Cases and hooks</td></tr>
+                <tr><td><code>assert_true / assert_false / assert_same / assert_equals / assert_null / assert_not_null / assert_contains / assert_not_contains / assert_matches / assert_count / assert_key_exists / assert_instance_of / assert_throws</code></td><td>Assertions</td></tr>
+                <tr><td><code>http_get / http_post / http_put / http_patch / http_delete / http_json / http_request / http_follow</code>, <code>http_use_app_routes()</code>, <code>acting_as($user)</code></td><td>HTTP client</td></tr>
+                <tr><td><code>use_test_database()</code>, <code>assert_database_has()</code>, <code>assert_database_missing()</code>, <code>assert_database_count()</code></td><td>Database testing</td></tr>
+                <tr><td><code>test_next_request()</code>, <code>test_reset_state()</code></td><td>Manual state control</td></tr>
+            </table></div>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

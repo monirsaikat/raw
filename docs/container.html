@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Container · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Container</h1>
+            <p class="lead">A dependency injection container with reflection-based auto-wiring. Controllers, class-based middleware and policies are built through it, so their constructor dependencies arrive automatically.</p>
+
+            <h2>Resolving</h2>
+<pre><code class="language-php">$builder = app(ReportBuilder::class);      // constructor dependencies resolved recursively
+$container = app();                        // the Container itself
+app()->has(ReportBuilder::class);          // bound, or a class it could build</code></pre>
+            <p>A class that is not bound is built by reflection: each constructor parameter typed with a class is resolved the same way; scalar parameters take their default value; anything unresolvable throws <code>ContainerException</code> naming the parameter.</p>
+
+            <h2>Bindings</h2>
+<pre><code class="language-php">app()->bind(PaymentGateway::class, StripeGateway::class);                  // interface → implementation, fresh each time
+app()->singleton(Mailer::class, fn (Container $app) => new Mailer(config('mail')));   // built once, then shared
+app()->singleton(Clock::class);                                            // share an auto-wired class
+app()->instance(Settings::class, $settings);                               // an existing object
+app()->alias('mailer', Mailer::class);                                     // app('mailer')
+
+app()->when(ReportController::class)->needs(Cache::class)->give(FileCache::class);   // contextual
+app()->when(ImportJob::class)->needs(Cache::class)->give(fn () => new ArrayCache());</code></pre>
+            <p>Closures receive the container and any parameters passed to <code>make()</code>. Declare bindings in <code>config/container.php</code> so they are registered at bootstrap:</p>
+<pre><code class="language-php">return [
+    'bindings' => ['PaymentGateway' => 'StripeGateway'],
+    'singletons' => ['Mailer' => fn (Container $app) => new Mailer(config('mail'))],
+    'aliases' => ['mailer' => 'Mailer'],
+];</code></pre>
+
+            <h2>Parameters</h2>
+<pre><code class="language-php">app()->make(Report::class, ['year' => 2026]);            // by parameter name
+app('greeting', ['name' => 'Ann']);                       // forwarded to a closure binding</code></pre>
+
+            <h2>Calling with injection</h2>
+<pre><code class="language-php">app()->call([$service, 'run'], ['limit' => 10]);        // method injection
+app()->call('ReportController@show', [5]);                // Class@method, positional arguments
+app()->call(fn (Mailer $mailer, string $to) => ..., ['to' => 'a@b.co']);
+app()->call(ImportJob::class);                            // invokable class</code></pre>
+            <p>For each parameter the container tries, in order: a value passed by name, a positional value that fits the type, a dependency from the container, the parameter's default, <code>null</code> when nullable. This is exactly how route actions receive route parameters and injected services together.</p>
+
+            <h2>Where the container is used</h2>
+            <ul>
+                <li>Route actions: the controller is built with <code>make()</code> and the method invoked with <code>call()</code>. See <a href="controllers.html">Controllers</a>.</li>
+                <li>Class-based middleware: <code>middleware('log', LogRequests::class)</code>.</li>
+                <li>Policies and gate callbacks written as <code>'Class@method'</code>.</li>
+                <li>Your own services: <code>app(InvoiceService::class)</code> anywhere.</li>
+            </ul>
+
+            <h2>Inspection and reset</h2>
+<pre><code class="language-php">app()->bound(Mailer::class);   app()->resolved(Mailer::class);   app()->forget(Mailer::class);
+app()->flush();                // everything gone; container_boot() reloads config/container.php</code></pre>
+
+            <h2>Errors</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Message</th><th>Meaning</th></tr>
+                <tr><td><code>Unresolvable parameter [$count] in Foo::__construct()</code></td><td>A scalar without a default; pass it by name or bind the class with a closure.</td></tr>
+                <tr><td><code>[Cache] is an interface and is not instantiable</code></td><td>Bind the interface to a class in <code>config/container.php</code>.</td></tr>
+                <tr><td><code>Circular dependency: A -> B -> A</code></td><td>Two constructors require each other; inject a factory or pass one lazily.</td></tr>
+            </table>
+            </div>
+
+            <h2>Testing</h2>
+            <p>The test runner flushes the container before every test and re-runs <code>container_boot()</code>, so bindings made in one test never leak into another. Replace a service under test with <code>app()->instance(Mailer::class, new FakeMailer())</code>.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

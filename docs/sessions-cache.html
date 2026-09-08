@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sessions, flash and cache · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Sessions, flash and cache</h1>
+            <p class="lead">State that survives between requests: the session for one visitor, flash data for exactly one following request, a file cache for everyone, and rate limiting on top of it.</p>
+
+            <h2>Sessions</h2>
+<pre><code class="language-php">session_set('cart', $items);       session_get('cart', []);       session_has('cart');
+session_pull('once');              // get and forget
+session_forget('cart');            session_all();                 session_flush();
+session_regenerate();              // new ID, same data — done automatically on login and logout
+session_invalidate();              // wipe data and rotate the ID</code></pre>
+            <p>Nothing is started until the first call, so a request that never touches the session pays nothing. Settings live in <code>config/session.php</code>: cookie name (<code>SESSION_NAME</code>), idle timeout in minutes (<code>SESSION_LIFETIME</code>, 0 disables), path, domain, <code>SameSite=Lax</code>, and the <code>Secure</code> flag (forced by <code>SESSION_SECURE_COOKIE</code>, and set automatically on HTTPS). Cookies are always <code>HttpOnly</code>; PHP's strict mode rejects unknown session IDs.</p>
+            <p>Under the CLI (console commands, tests) <code>$_SESSION</code> is a plain array, so the same code runs without a web server.</p>
+
+            <h2>Flash data</h2>
+            <p>Flash values are written for the <em>next</em> request and readable throughout it, which is what the post-redirect-get pattern needs:</p>
+<pre><code class="language-php">flash('success', 'Saved.');              // visible on the next request
+return redirect_route('posts.index');
+
+flash('success');                        // on that next request: "Saved." (repeatable reads)
+flash_has('success');   flash_all();
+flash_now('info', 'Shown right now');    // current request only
+flash_keep();                            // carry the current bag one request further (a second redirect)</code></pre>
+            <p>Templates receive the whole bag as <code>$flash</code>, and <code>views/includes/alerts.tpl</code> renders <code>success</code>, <code>error</code>, <code>warning</code> and <code>info</code> as Bootstrap alerts. Validation uses the same mechanism for <code>errors</code> and <code>old</code>; <code>old('email')</code> reads flashed input.</p>
+
+            <h2>Cache</h2>
+<pre><code class="language-php">cache_set('stats', $stats, 600);                          // seconds; 0 = forever
+cache_get('stats');   cache_get('stats', $default);   cache_has('stats');
+cache_forget('stats');   cache_flush();
+
+$stats = cache_remember('stats', 600, fn () => Database::table('orders')->count());</code></pre>
+            <p>Values are serialised into <code>storage/cache</code>, written through a temporary file so readers never see a half-written entry; anything serialisable can be stored, including models and collections. <code>console cache:clear</code> empties the directory.</p>
+
+            <h2>Rate limiting</h2>
+<pre><code class="language-php">post('/login', 'AuthController@login', 'login.store', ['throttle:5,1']);    // 5 per minute per IP
+post('/api/upload', 'UploadController@store', null, ['throttle:60,60']);    // 60 per hour</code></pre>
+            <p>The <code>throttle</code> middleware counts requests per client IP, method and path in the cache. When the limit is exceeded it answers 429 with a <code>Retry-After</code> header and an error page or JSON message. The primitives are available for other keys:</p>
+<pre><code class="language-php">$limit = rate_limit_attempt('otp:' . $user->id, 3, 300);   // ['allowed' => bool, 'remaining' => int, 'retry_after' => seconds]
+rate_limit_clear('otp:' . $user->id);</code></pre>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

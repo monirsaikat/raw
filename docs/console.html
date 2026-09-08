@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Console</h1>
+            <p class="lead"><code>php console.php &lt;command&gt; [arguments] [--option=value]</code>. Run it without arguments for the list. Options may be written as <code>--name=value</code>, <code>--flag</code>, or short flags such as <code>-mf</code>.</p>
+
+            <h2>Development</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Command</th><th>Description</th></tr>
+                <tr><td><code>serve [host:port]</code></td><td>Starts the built-in PHP server, default <code>127.0.0.1:8000</code>, serving assets directly and routing everything else through <code>index.php</code>.</td></tr>
+                <tr><td><code>test [filter]</code></td><td>Runs <code>tests/*.php</code>, or only files whose name contains the filter. Loads <code>pdo_sqlite</code> on demand if it is installed but disabled.</td></tr>
+                <tr><td><code>route:list</code></td><td>Prints method, path, name, action and middleware of every route.</td></tr>
+                <tr><td><code>key:generate</code></td><td>Writes a random <code>APP_KEY</code> into <code>.env</code> (creating it from <code>.env.example</code> if needed).</td></tr>
+            </table>
+            </div>
+
+            <h2>Database</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Command</th><th>Description</th></tr>
+                <tr><td><code>migrate [--seed]</code></td><td>Runs pending migrations as a batch; <code>--seed</code> runs the seeders afterwards.</td></tr>
+                <tr><td><code>migrate:rollback [--step=N]</code></td><td>Reverts the last batch (or N batches).</td></tr>
+                <tr><td><code>migrate:reset</code></td><td>Reverts every batch.</td></tr>
+                <tr><td><code>migrate:fresh [--seed] [--force]</code></td><td>Drops all tables and migrates from scratch. Prompts for confirmation unless <code>--force</code>; non-interactive shells need <code>--force</code>.</td></tr>
+                <tr><td><code>migrate:status</code></td><td>Shows each migration with its batch and timestamp, or "Pending".</td></tr>
+                <tr><td><code>db:seed [--class=Name]</code></td><td>Runs every seeder in <code>database/seeders</code>, or one.</td></tr>
+                <tr><td><code>db:show [connection]</code></td><td>Connection, driver, database name, and every table with its row count.</td></tr>
+                <tr><td><code>db:table &lt;name&gt; [connection]</code></td><td>Columns of a table: type, nullable, default, auto-increment.</td></tr>
+            </table>
+            </div>
+
+            <h2>Generators</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Command</th><th>Creates</th></tr>
+                <tr><td><code>make:controller Post</code></td><td><code>controllers/PostController.php</code> (the suffix is added when missing)</td></tr>
+                <tr><td><code>make:model Post [-m] [-f] [-c]</code></td><td><code>models/Post.php</code>; with a migration, a factory, a controller</td></tr>
+                <tr><td><code>make:migration name [--create=table] [--table=table] [--sql]</code></td><td>A timestamped file in <code>database/migrations/</code>. <code>create_x_table</code> and <code>add_y_to_x_table</code> names pick the stub automatically</td></tr>
+                <tr><td><code>make:factory Post</code></td><td><code>database/factories/PostFactory.php</code></td></tr>
+                <tr><td><code>make:seeder UserSeeder</code></td><td><code>database/seeders/UserSeeder.php</code></td></tr>
+                <tr><td><code>make:policy Post [--model=Post]</code></td><td><code>policies/PostPolicy.php</code> with viewAny/view/create/update/delete</td></tr>
+                <tr><td><code>make:middleware admin</code></td><td><code>middleware/admin.php</code></td></tr>
+            </table>
+            </div>
+            <p>Generators never overwrite an existing file.</p>
+
+            <h2>Production</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Command</th><th>Description</th></tr>
+                <tr><td><code>route:cache</code></td><td>Compiles <code>routes/web.php</code> into <code>bootstrap/cache/routes.php</code>, used whenever <code>APP_DEBUG</code> is off. Refuses closure actions.</td></tr>
+                <tr><td><code>route:clear</code></td><td>Deletes the compiled table.</td></tr>
+                <tr><td><code>view:clear</code></td><td>Deletes compiled Smarty templates; run after deploying template changes.</td></tr>
+                <tr><td><code>cache:clear</code></td><td>Empties <code>storage/cache</code>, including rate-limit counters.</td></tr>
+            </table>
+            </div>
+
+            <h2>Adding a command</h2>
+            <p>Commands are registered in <code>console.php</code> with <code>command(name, description, handler)</code>. The handler receives the raw arguments and returns an exit code; <code>parse_arguments()</code> splits them into positional values and options.</p>
+<pre><code class="language-php">command('users:prune', 'Delete accounts inactive for N days [--days=90] [--dry]', function (array $args) {
+    [$positional, $options] = parse_arguments($args);
+    $days = (int) ($options['days'] ?? 90);
+
+    $query = User::where('last_login_at', '&lt;', now()->subDays($days));
+    line($query->count() . ' users to prune');
+
+    if (!isset($options['dry'])) {
+        line('Deleted ' . $query->delete());
+    }
+
+    return 0;
+});</code></pre>
+            <p>Helpers available inside handlers: <code>line()</code>, <code>error_line()</code>, <code>print_table($headers, $rows)</code>, <code>confirm($question)</code>, <code>write_stub($path, $contents)</code>, <code>relative_path()</code>, and everything the application offers (models, <code>Database</code>, <code>config()</code>…). Bootstrap has already run, so <code>.env</code> and the container are loaded.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

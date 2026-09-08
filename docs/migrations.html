@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migrations and seeding · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Migrations and seeding</h1>
+            <p class="lead">Schema changes are versioned files in <code>database/migrations/</code>, written with the schema builder or as plain SQL. Seeders and factories fill the tables.</p>
+
+            <h2>Writing a migration</h2>
+<pre><code class="language-bash">php console.php make:migration create_posts_table            # Schema::create stub
+php console.php make:migration add_slug_to_posts_table       # Schema::table stub (name pattern ..._to_X_table)
+php console.php make:migration anything --create=posts       # explicit
+php console.php make:migration anything --table=posts
+php console.php make:migration anything --sql                # SQL file instead of PHP</code></pre>
+<pre><code class="language-php">&lt;?php
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('title', 150)->unique();
+            $table->string('slug')->nullable()->index();
+            $table->text('body')->nullable();
+            $table->enum('status', ['draft', 'live'])->default('draft');
+            $table->decimal('price', 10, 2)->unsigned()->default(0);
+            $table->boolean('featured')->default(false);
+            $table->json('meta')->nullable();
+            $table->dateTime('published_at')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index(['status', 'published_at']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('posts');
+    }
+};</code></pre>
+            <p>Files are named <code>YYYY_MM_DD_HHMMSS_description.php</code> and run in name order. Set <code>protected ?string $connection = 'other';</code> on the class to target another connection.</p>
+
+            <h2>Running migrations</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Command</th><th>Effect</th></tr>
+                <tr><td><code>migrate</code></td><td>Runs pending migrations as one batch. <code>--seed</code> runs the seeders afterwards.</td></tr>
+                <tr><td><code>migrate:rollback</code></td><td>Reverts the last batch (<code>--step=2</code> for more).</td></tr>
+                <tr><td><code>migrate:reset</code></td><td>Reverts everything.</td></tr>
+                <tr><td><code>migrate:fresh</code></td><td>Drops every table and migrates from scratch. Asks for confirmation; <code>--force</code> skips it; <code>--seed</code> seeds afterwards.</td></tr>
+                <tr><td><code>migrate:status</code></td><td>Lists every file with its batch and run time.</td></tr>
+            </table>
+            </div>
+            <p>Applied migrations are recorded in the <code>migrations</code> table.</p>
+
+            <h2>Column types</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Method</th><th>MySQL type</th></tr>
+                <tr><td><code>id()</code>, <code>increments()</code></td><td><code>INT UNSIGNED AUTO_INCREMENT PRIMARY KEY</code></td></tr>
+                <tr><td><code>bigIncrements()</code>, <code>smallIncrements()</code>, <code>tinyIncrements()</code></td><td>Same with BIGINT / SMALLINT / TINYINT</td></tr>
+                <tr><td><code>integer()</code>, <code>bigInteger()</code>, <code>mediumInteger()</code>, <code>smallInteger()</code>, <code>tinyInteger()</code> and <code>unsigned…</code> variants</td><td>Integer types</td></tr>
+                <tr><td><code>foreignId('user_id')</code>, <code>foreignIdFor(User::class)</code></td><td><code>INT UNSIGNED</code>, matching <code>id()</code></td></tr>
+                <tr><td><code>boolean()</code></td><td><code>TINYINT(1)</code></td></tr>
+                <tr><td><code>string($name, 255)</code>, <code>char()</code></td><td><code>VARCHAR</code>, <code>CHAR</code></td></tr>
+                <tr><td><code>text()</code>, <code>mediumText()</code>, <code>longText()</code>, <code>json()</code>, <code>binary()</code></td><td>Text and blob types</td></tr>
+                <tr><td><code>uuid()</code>, <code>ipAddress()</code>, <code>macAddress()</code></td><td><code>CHAR(36)</code>, <code>VARCHAR(45)</code>, <code>VARCHAR(17)</code></td></tr>
+                <tr><td><code>enum($name, [...])</code></td><td><code>ENUM</code> (a CHECK constraint on SQLite)</td></tr>
+                <tr><td><code>float()</code>, <code>double()</code>, <code>decimal($name, 8, 2)</code>, <code>unsignedDecimal()</code></td><td>Numeric types</td></tr>
+                <tr><td><code>date()</code>, <code>dateTime()</code>, <code>timestamp()</code>, <code>time()</code>, <code>year()</code></td><td>Date and time types</td></tr>
+                <tr><td><code>timestamps()</code>, <code>softDeletes()</code>, <code>rememberToken()</code></td><td>Nullable <code>created_at</code>/<code>updated_at</code>; nullable <code>deleted_at</code>; <code>remember_token VARCHAR(100) NULL</code></td></tr>
+            </table>
+            </div>
+            <p><code>id()</code> and <code>foreignId()</code> are both <code>INT UNSIGNED</code> so foreign keys line up with the tables that already exist. Use <code>bigIncrements()</code> with <code>unsignedBigInteger()</code> if you want 64-bit keys.</p>
+
+            <h2>Column modifiers</h2>
+<pre><code class="language-php">->nullable()  ->default('draft')  ->default(Database::raw('CURRENT_TIMESTAMP'))  ->useCurrent()  ->useCurrentOnUpdate()
+->unsigned()  ->unique()  ->index()  ->primary()  ->autoIncrement()
+->comment('Homepage flag')  ->after('title')  ->first()  ->charset('utf8mb4')  ->collation('utf8mb4_bin')
+->change()                                  // ALTER ... MODIFY (MySQL only)</code></pre>
+
+            <h2>Indexes and foreign keys</h2>
+<pre><code class="language-php">$table->primary(['a', 'b']);
+$table->unique('email');   $table->unique(['post_id', 'tag_id']);
+$table->index(['status', 'created_at'], 'posts_status_idx');   // optional custom name
+$table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
+$table->foreignId('user_id')->constrained()->nullOnDelete();     // table guessed from the column: users
+$table->foreignId('author_id')->constrained('users')->restrictOnDelete()->cascadeOnUpdate();</code></pre>
+            <p>Index names default to <code>table_col1_col2_type</code>, which is what the drop methods compute when given columns.</p>
+
+            <h2>Altering tables</h2>
+<pre><code class="language-php">Schema::table('posts', function (Blueprint $table) {
+    $table->string('subtitle')->nullable()->after('title');
+    $table->string('title', 200)->change();
+    $table->renameColumn('views', 'hits');
+    $table->dropColumn(['body', 'meta']);
+    $table->dropIndex(['status', 'published_at']);   $table->dropUnique('posts_title_unique');
+    $table->dropForeign(['user_id']);   $table->dropPrimary();   $table->dropSoftDeletes();   $table->dropTimestamps();
+});
+
+Schema::rename('posts', 'articles');   Schema::drop('old');   Schema::dropIfExists('old');   Schema::dropAllTables();</code></pre>
+
+            <h2>Inspecting the schema</h2>
+<pre><code class="language-php">Schema::hasTable('posts');   Schema::hasColumn('posts', 'slug');   Schema::hasColumns('posts', ['a', 'b']);
+Schema::getTables();   Schema::getColumnListing('posts');
+Schema::getColumns('posts');                 // [['name', 'type', 'nullable', 'default', 'auto_increment'], ...]
+Schema::withoutForeignKeyConstraints(fn () => ...);
+Schema::toSql($blueprint);                   // the DDL a blueprint would run</code></pre>
+            <p>Every <code>Schema</code> method accepts a connection name as its last argument.</p>
+
+            <h2>SQL migrations</h2>
+            <p>A <code>.sql</code> file with <code>-- up</code> and <code>-- down</code> sections is also a migration. Statements are split on semicolons; keep the SQL simple (no semicolons inside string literals).</p>
+<pre><code class="language-sql">-- up
+ALTER TABLE posts ADD COLUMN note VARCHAR(50) NULL;
+
+-- down
+ALTER TABLE posts DROP COLUMN note;</code></pre>
+
+            <h2>SQLite differences</h2>
+            <p>The SQLite grammar covers creating tables (with inline foreign keys), adding, dropping and renaming columns, and indexes. SQLite cannot modify existing columns or add constraints to existing tables; those blueprints throw a clear <code>RuntimeException</code>. The MySQL-only modifiers <code>after()</code>, <code>comment()</code> and <code>unsigned()</code> are ignored on SQLite.</p>
+
+            <h2>Seeders</h2>
+<pre><code class="language-bash">php console.php make:seeder UserSeeder
+php console.php db:seed                     # every file in database/seeders
+php console.php db:seed --class=UserSeeder</code></pre>
+<pre><code class="language-php">&lt;?php
+
+return function (): void {
+    User::factory()->count(10)->create();
+    User::factory()->create(['email' => 'admin@example.com', 'name' => 'Admin']);
+};</code></pre>
+
+            <h2 id="factories">Factories</h2>
+<pre><code class="language-bash">php console.php make:factory Post           # database/factories/PostFactory.php</code></pre>
+<pre><code class="language-php">&lt;?php
+
+class PostFactory extends Factory
+{
+    protected string $model = 'Post';
+
+    public function definition(): array
+    {
+        return [
+            'title' => fake()->unique()->sentence(4),
+            'body' => fake()->paragraphs(3, true),
+            'user_id' => User::factory(),                 // nested factory → created and reduced to its key
+            'views' => fake()->number(0, 500),
+            'published_at' => fn (array $attributes) => $attributes['views'] > 100 ? now() : null,
+        ];
+    }
+}</code></pre>
+<pre><code class="language-php">Post::factory()->create();                                   // one saved model
+Post::factory()->count(20)->create(['user_id' => $user]);    // Collection; models reduce to their key
+Post::factory()->make();                                     // unsaved
+Post::factory()->raw();                                      // attribute array only
+Post::factory()->state(['published_at' => now()])->create();
+Post::factory()->state(fn (array $attributes) => ['title' => strtoupper($attributes['title'])])->make();
+Post::factory()->count(4)->sequence(['status' => 'draft'], ['status' => 'live'])->make();   // alternates
+Post::factory()->afterCreating(fn (Post $post) => $post->tags()->attach(1))->create();</code></pre>
+
+            <h2>Fake data</h2>
+            <p><code>fake()</code> generates realistic values without any library: <code>name()</code>, <code>firstName()</code>, <code>lastName()</code>, <code>userName()</code>, <code>email()</code>, <code>safeEmail()</code>, <code>password()</code>, <code>phone()</code>, <code>jobTitle()</code>, <code>company()</code>, <code>city()</code>, <code>country()</code>, <code>postcode()</code>, <code>streetAddress()</code>, <code>address()</code>, <code>word()</code>, <code>words()</code>, <code>sentence()</code>, <code>sentences()</code>, <code>paragraph()</code>, <code>paragraphs()</code>, <code>text()</code>, <code>title()</code>, <code>slug()</code>, <code>number()</code>, <code>float()</code>, <code>digits()</code>, <code>boolean()</code>, <code>date()</code>, <code>dateTime()</code>, <code>time()</code>, <code>uuid()</code>, <code>domain()</code>, <code>url()</code>, <code>ipv4()</code>, <code>hexColor()</code>, <code>colorName()</code>, <code>randomElement()</code>, <code>randomElements()</code>, <code>shuffle()</code>. Prefix a call with <code>unique()</code> to never repeat a value; <code>fake()->seed(42)</code> makes a run reproducible.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

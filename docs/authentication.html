@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authentication · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Authentication</h1>
+            <p class="lead">Session-based login with hashed passwords, remember-me cookies, intended-URL redirects and throttling. The app ships with working register, login and logout flows to copy from.</p>
+
+            <h2>Configuration</h2>
+            <p><code>config/auth.php</code>:</p>
+<pre><code class="language-php">'model' => 'User',               // the authenticated model
+'username' => 'email',           // column matched by auth_attempt()
+'session_key' => 'auth_id',
+'login_route' => 'login',        // where the auth middleware sends guests
+'home_route' => 'home',          // where the guest middleware sends users
+'policies' => [],                // see Authorization
+'remember' => ['cookie' => 'remember_me', 'days' => 30],</code></pre>
+
+            <h2>Helpers</h2>
+<pre><code class="language-php">auth_check();   auth_guest();   auth_id();   auth_user();          // User|null, loaded once per request
+auth_attempt($email, $password, remember: true);                    // bool
+auth_login($user);   auth_login($userId, remember: true);
+auth_logout();
+auth_intended('/dashboard');                                        // Response: redirect to the page the user wanted, else the default</code></pre>
+            <p><code>auth_attempt()</code> looks the user up by the username column, verifies the password against a dummy hash when the user does not exist so timing does not reveal accounts, re-hashes passwords made with an outdated algorithm, and logs the user in. Logging in rotates the session ID.</p>
+
+            <h2>The User model</h2>
+<pre><code class="language-php">class User extends Model
+{
+    use Authorizable;
+
+    protected static array $fillable = ['name', 'email', 'password'];
+    protected static array $hidden = ['password', 'remember_token'];
+
+    public static function hashPassword(string $password): string;
+    public function verifyPassword(string $password): bool;
+    public static function findByEmail(string $email): ?static;
+}</code></pre>
+            <p>Passwords are stored with <code>password_hash()</code> (bcrypt by default). <code>$hidden</code> keeps the hash and the remember token out of JSON.</p>
+
+            <h2>Registration</h2>
+<pre><code class="language-php">public function register()
+{
+    $data = validated(input(), [
+        'name' => 'required|max:100',
+        'email' => 'required|email|max:150|unique:users,email',
+        'password' => 'required|min:8|confirmed',
+    ], ['email.unique' => 'An account with this email already exists.']);
+
+    $user = User::create([
+        'name' => $data['name'],
+        'email' => $data['email'],
+        'password' => User::hashPassword($data['password']),
+    ]);
+
+    auth_login($user);
+
+    return redirect_route('account');
+}</code></pre>
+
+            <h2>Login and logout</h2>
+<pre><code class="language-php">public function login()
+{
+    $data = validated(input(), ['email' => 'required|email', 'password' => 'required']);
+
+    if (!auth_attempt($data['email'], $data['password'], has_input('remember'))) {
+        return back_with_errors(['email' => ['Those credentials do not match our records.']]);
+    }
+
+    return auth_intended(route_url('account'));
+}
+
+public function logout()
+{
+    auth_logout();
+
+    return redirect_route('home');
+}</code></pre>
+<pre><code class="language-php">group(['middleware' => ['guest']], function () {
+    get('/login', 'AuthController@showLogin', 'login');
+    post('/login', 'AuthController@login', 'login.store', ['throttle:5,1']);
+});
+
+group(['middleware' => ['auth']], function () {
+    get('/account', 'AuthController@account', 'account');
+    post('/logout', 'AuthController@logout', 'logout');
+});</code></pre>
+            <p>Logout is a POST so it is covered by CSRF protection; the layout renders it as a small form.</p>
+
+            <h2>Middleware</h2>
+            <ul>
+                <li><code>auth</code>: guests are redirected to the login route. For GET requests the requested URL is stored so <code>auth_intended()</code> can return there after login. Clients asking for JSON receive a 401 instead.</li>
+                <li><code>guest</code>: logged-in users are sent to the home route.</li>
+                <li><code>throttle:5,1</code>: five attempts per minute per IP, then 429.</li>
+            </ul>
+
+            <h2>Remember me</h2>
+            <p>With <code>remember: true</code> a random token is generated, its HMAC (keyed with <code>APP_KEY</code>) is stored in <code>users.remember_token</code>, and a cookie <code>id|token</code> is sent for thirty days. On a later visit without a session the cookie is verified in constant time and the user is logged in with a fresh session ID. Logging out clears both the column and the cookie. The users table needs the column: <code>$table->rememberToken()</code>.</p>
+
+            <h2>In templates</h2>
+<pre><code class="language-smarty">{if $auth_user}
+    &lt;a href="{navigate name='account'}">{$auth_user.name}&lt;/a>
+    &lt;form method="post" action="{navigate name='logout'}">{csrf_field}&lt;button>Log out&lt;/button>&lt;/form>
+{else}
+    &lt;a href="{navigate name='login'}">Log in&lt;/a>
+{/if}</code></pre>
+
+            <h2>Testing</h2>
+<pre><code class="language-php">test('a user can log in', function () {
+    $user = User::factory()->create(['email' => 'a@b.co']);        // factory password: "password"
+
+    http_post('/login', ['email' => 'a@b.co', 'password' => 'password'])
+        ->assertRedirect('/account')
+        ->assertAuthenticated($user);
+});
+
+test('protected pages need a user', function () {
+    http_get('/account')->assertRedirect('/login');
+    acting_as(User::factory()->create());
+    http_get('/account')->assertOk();
+});</code></pre>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

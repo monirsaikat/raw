@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deployment · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Deployment</h1>
+            <p class="lead">Copy the files, set the environment, run the migrations, warm the caches. There is no build step and nothing to install.</p>
+
+            <h2>Checklist</h2>
+            <ol>
+                <li>Upload the project (excluding <code>.env</code>, <code>storage/</code> contents, <code>bootstrap/cache/</code>, <code>tests/</code> and <code>docs/</code> if you like).</li>
+                <li>Create <code>.env</code> with <code>APP_ENV=production</code>, <code>APP_DEBUG=false</code>, the database credentials and a generated <code>APP_KEY</code>.</li>
+                <li>Make <code>storage/</code> (logs, cache, views) writable by the web server; everything else can be read-only.</li>
+                <li><code>php console.php migrate</code></li>
+                <li><code>php console.php route:cache</code> and <code>php console.php view:clear</code></li>
+                <li>Serve over HTTPS; then set <code>HSTS_ENABLED=true</code>.</li>
+            </ol>
+
+            <h2>Apache</h2>
+            <p>Point the document root at the project directory, or place the project in a sub-directory of an existing root; both work without configuration because the base path is detected. <code>mod_rewrite</code> must be enabled and <code>AllowOverride All</code> set for the directory so <code>.htaccess</code> is honoured.</p>
+<pre><code class="language-ini">&lt;VirtualHost *:443>
+    ServerName example.com
+    DocumentRoot /var/www/app
+    &lt;Directory /var/www/app>
+        AllowOverride All
+        Require all granted
+    &lt;/Directory>
+&lt;/VirtualHost></code></pre>
+            <p>The shipped <code>.htaccess</code> routes non-file requests to <code>index.php</code>, blocks dotfiles, disables directory listings, and, when the modules are present, compresses text responses (<code>mod_deflate</code>) and sends year-long cache headers for versioned assets (<code>mod_expires</code>, <code>mod_headers</code>). Those blocks are wrapped in <code>IfModule</code>, so a server without them still works. Sensitive directories carry their own deny rules; verify with a request to <code>/.env</code> or <code>/core/route.php</code>, which must return 403.</p>
+
+            <h2>Other servers</h2>
+            <p>Nginx or Caddy need the equivalent of the rewrite rule (try the file, else <code>index.php</code>) and must deny access to every directory except <code>assets/</code> and, if published, <code>docs/</code>. The built-in server (<code>console serve</code>) is for development only.</p>
+
+            <h2>PHP settings</h2>
+            <ul>
+                <li><code>opcache.enable=1</code>; on immutable deployments also <code>opcache.validate_timestamps=0</code> and restart PHP after each deploy.</li>
+                <li><code>display_errors=Off</code> (the framework renders errors itself), <code>log_errors=On</code>.</li>
+                <li><code>upload_max_filesize</code> and <code>post_max_size</code> according to your forms.</li>
+                <li>Sessions use PHP's default file handler; on a multi-server setup point <code>session.save_path</code> at shared storage or a session extension.</li>
+            </ul>
+
+            <h2>Caches and compiled files</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>What</th><th>Where</th><th>When to refresh</th></tr>
+                <tr><td>Route table</td><td><code>bootstrap/cache/routes.php</code></td><td>After changing <code>routes/web.php</code>: <code>route:cache</code></td></tr>
+                <tr><td>Compiled templates</td><td><code>storage/views/</code></td><td>After changing any <code>.tpl</code>: <code>view:clear</code> (compile checks are off when <code>APP_DEBUG</code> is false)</td></tr>
+                <tr><td>Application cache</td><td><code>storage/cache/</code></td><td><code>cache:clear</code> when cached data must be dropped; rate-limit counters live here too</td></tr>
+                <tr><td>Logs</td><td><code>storage/logs/app-YYYY-MM-DD.log</code></td><td>Rotate or delete old files with a cron job; the framework only appends</td></tr>
+            </table>
+            </div>
+
+            <h2>Database</h2>
+            <p>Run <code>migrate</code> on every deploy; it is idempotent. Keep backups before <code>migrate:rollback</code> or <code>migrate:fresh</code> in production; the latter drops every table. Use <code>DB_SLOW_QUERY_MS</code> to spot slow queries in the log.</p>
+
+            <h2>Health</h2>
+            <p><code>GET /api/ping</code> returns JSON with the current time and the logged-in user (null for monitors), which makes a cheap liveness check. Add a route that touches the database if you need a readiness check.</p>
+
+            <h2>Upgrading PHP</h2>
+            <p>The code targets PHP 8.3 and uses no extensions beyond PDO, mbstring, intl (for slugs, optional), json and the standard library, so newer PHP versions should need no changes beyond running the test suite.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

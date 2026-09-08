@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Views · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Views</h1>
+            <p class="lead">Templates are Smarty 5 files in <code>views/</code>. Output is escaped by default, layouts are inherited with blocks, and every template receives a few globals.</p>
+
+            <h2>Rendering</h2>
+<pre><code class="language-php">return view('posts/show', ['post' => $post]);      // views/posts/show.tpl
+view_exists('errors/404');                            // true when the file exists
+View::share('menu', $menu);                            // available to every render for the rest of the request</code></pre>
+            <p><code>view()</code> returns the rendered string; the action returns it and the framework sends it. Data assigned to one render never leaks into the next.</p>
+
+            <h2>Layouts and blocks</h2>
+            <p><code>views/layouts/main.tpl</code> holds the page chrome. Pages extend it and fill blocks:</p>
+<pre><code class="language-smarty">{extends file='layouts/main.tpl'}
+
+{block name='title'}Posts — {$app_name}{/block}
+
+{block name='styles'}&lt;link rel="stylesheet" href="{asset path='assets/css/posts.css'}">{/block}
+
+{block name='content'}
+    &lt;section class="container my-5">
+        {foreach $posts as $post}
+            &lt;h2>&lt;a href="{navigate name='posts.show' id=$post.id}">{$post.title}&lt;/a>&lt;/h2>
+            &lt;p>{$post.excerpt}&lt;/p>
+        {foreachelse}
+            &lt;p>No posts yet.&lt;/p>
+        {/foreach}
+        {$posts->links()|raw}
+    &lt;/section>
+{/block}
+
+{block name='scripts'}&lt;script nonce="{csp_nonce}">console.log('ready');&lt;/script>{/block}</code></pre>
+            <p>The layout defines <code>title</code>, <code>styles</code>, <code>content</code> and <code>scripts</code>. Partials live in <code>views/includes/</code> and are pulled in with <code>{include file='includes/alerts.tpl'}</code>.</p>
+
+            <h2>Globals</h2>
+            <p>Every render receives these variables in addition to what the controller passes:</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Variable</th><th>Value</th></tr>
+                <tr><td><code>$app_name</code></td><td><code>config('app.name')</code></td></tr>
+                <tr><td><code>$auth_user</code></td><td>The logged-in user model, or null</td></tr>
+                <tr><td><code>$errors</code></td><td>Validation errors flashed by the previous request: <code>$errors.email.0</code></td></tr>
+                <tr><td><code>$old</code></td><td>Old input flashed by the previous request: <code>$old.email</code></td></tr>
+                <tr><td><code>$flash</code></td><td>The whole flash bag: <code>$flash.success</code>, <code>$flash.error</code>…</td></tr>
+                <tr><td><code>$current_route</code></td><td>Name of the matched route</td></tr>
+            </table>
+            </div>
+<pre><code class="language-smarty">&lt;input name="email" value="{$old.email|default:''}" class="form-control{if isset($errors.email)} is-invalid{/if}">
+{if isset($errors.email)}&lt;div class="invalid-feedback">{$errors.email.0}&lt;/div>{/if}
+
+{if $auth_user}Hello, {$auth_user.name}{else}&lt;a href="{navigate name='login'}">Log in&lt;/a>{/if}</code></pre>
+
+            <h2>Escaping</h2>
+            <p><code>{$var}</code> is HTML-escaped automatically. Reading an undefined variable or key is silent (no notice), so <code>{$old.name}</code> is safe on a fresh form. For trusted markup use the <code>raw</code> modifier:</p>
+<pre><code class="language-smarty">{$post.body_html|raw}
+{$posts->links()|raw}</code></pre>
+            <div class="warn"><p>Only mark content as raw when you produced it or sanitised it yourself. Everything that came from a user must stay escaped.</p></div>
+
+            <h2>Models and collections in templates</h2>
+            <p>Models implement array access, so <code>{$post.title}</code> and <code>{$post.author.name}</code> work, including lazy-loaded relationships. Collections and paginators iterate with <code>{foreach}</code> and count with <code>{count($items)}</code>. Date attributes print as <code>Y-m-d H:i:s</code> and expose methods: <code>{$post.created_at->diffForHumans()}</code>.</p>
+
+            <h2>Template functions and modifiers</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Tag</th><th>Output</th></tr>
+                <tr><td><code>{navigate name='user' id=$user.id}</code></td><td>URL of a named route, extra attributes become parameters or the query string</td></tr>
+                <tr><td><code>{url path='about'}</code></td><td>Base-path-aware URL</td></tr>
+                <tr><td><code>{asset path='assets/css/app.css'}</code></td><td>Asset URL with a <code>?v=</code> cache-busting version</td></tr>
+                <tr><td><code>{csrf_field}</code>, <code>{csrf_meta}</code></td><td>Hidden token input; meta tag for JavaScript</td></tr>
+                <tr><td><code>{method_field method='DELETE'}</code></td><td>Hidden <code>_method</code> input for PUT/PATCH/DELETE forms</td></tr>
+                <tr><td><code>{current_year}</code></td><td>Four-digit year</td></tr>
+                <tr><td><code>{csp_nonce}</code></td><td>The per-request nonce that the Content-Security-Policy allows for inline scripts</td></tr>
+                <tr><td><code>{if 'home'|route_is}</code></td><td>True when the current route matches (wildcards allowed: <code>'admin.*'</code>)</td></tr>
+                <tr><td><code>{if 'update'|can:$post}</code>, <code>{if 'delete'|cannot:$post}</code></td><td>Authorization checks for the logged-in user</td></tr>
+            </table>
+            </div>
+            <p>Register more in <code>config/view.php</code>: a <code>functions</code> entry maps a tag name to a PHP function receiving the attribute array; a <code>modifiers</code> entry maps a modifier to a function receiving the value and any arguments.</p>
+
+            <h2>Forms</h2>
+<pre><code class="language-smarty">&lt;form method="post" action="{navigate name='posts.update' id=$post.id}">
+    {csrf_field}
+    {method_field method='PUT'}
+    &lt;input name="title" value="{$old.title|default:$post.title}">
+    &lt;button type="submit">Save&lt;/button>
+&lt;/form></code></pre>
+
+            <h2>Flash messages</h2>
+            <p>The layout includes <code>views/includes/alerts.tpl</code>, which shows <code>$flash.success</code>, <code>$flash.error</code>, <code>$flash.warning</code> and <code>$flash.info</code> as Bootstrap alerts. Set one with <code>flash('success', 'Saved.')</code> before redirecting.</p>
+
+            <h2>Error pages</h2>
+            <p><code>views/errors/error.tpl</code> renders every error status with <code>$status</code>, <code>$title</code> and <code>$message</code>. Add <code>views/errors/404.tpl</code> (or any status) to customise one. Error templates are standalone by design so they still render when the layout's dependencies are unavailable.</p>
+
+            <h2>Compilation</h2>
+            <p>Smarty compiles templates into <code>storage/views</code>. With <code>APP_DEBUG=true</code> it re-compiles when a <code>.tpl</code> changes; otherwise it skips the check for speed, so run <code>console view:clear</code> after deploying template changes. Paths and options are in <code>config/view.php</code>.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>
