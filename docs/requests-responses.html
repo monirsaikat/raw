@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Requests and responses · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Requests and responses</h1>
+            <p class="lead">Functions for reading the current request and building the response. Input never includes cookies, JSON bodies are merged in transparently, and every response is a small <code>Response</code> object.</p>
+
+            <h2>Reading input</h2>
+<pre><code class="language-php">input();                       // all input, strings trimmed (GET + form body or JSON body)
+input('email');                // one field, trimmed, or null
+input('page', 1);              // with a default
+request('email');              // untrimmed
+query('page');                 // query string only
+input_only(['name', 'email']);
+input_except(['_token']);
+has_input('remember');         // present and not blank
+request_file('avatar');        // $_FILES entry, or null when nothing was uploaded
+old('email');                  // the previous request's input after a failed validation</code></pre>
+            <p>The body wins over the query string when both carry the same key. When the request's <code>Content-Type</code> is JSON the decoded body replaces the form fields, so an API client and a form post look identical to the action. <code>request_json()</code> and <code>request_body()</code> expose the raw body when needed.</p>
+
+            <h2>Request facts</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Function</th><th>Returns</th></tr>
+                <tr><td><code>request_method()</code></td><td>GET, POST, PUT, PATCH, DELETE or HEAD. A POST with a <code>_method</code> field reports the spoofed verb.</td></tr>
+                <tr><td><code>request_real_method()</code></td><td>The verb actually used on the wire.</td></tr>
+                <tr><td><code>request_path()</code></td><td>Path relative to the app root, normalised: <code>/about</code>.</td></tr>
+                <tr><td><code>request_uri()</code>, <code>request_url()</code></td><td>Path including the base path; the full absolute URL.</td></tr>
+                <tr><td><code>request_host()</code>, <code>request_ip()</code>, <code>request_is_secure()</code></td><td>Sanitised host, client address, whether HTTPS (or <code>X-Forwarded-Proto: https</code>).</td></tr>
+                <tr><td><code>request_header('X-Custom', $default)</code></td><td>Any request header.</td></tr>
+                <tr><td><code>request_is_json()</code>, <code>request_is_ajax()</code></td><td>JSON content type; <code>X-Requested-With: XMLHttpRequest</code>.</td></tr>
+                <tr><td><code>wants_json()</code></td><td>The client asked for JSON (<code>Accept</code>) or sent JSON without accepting HTML. Error responses use this to choose JSON over HTML.</td></tr>
+            </table>
+            </div>
+
+            <h2>Method spoofing</h2>
+            <p>HTML forms can only send GET and POST. To reach a PUT, PATCH or DELETE route, post a <code>_method</code> field:</p>
+<pre><code class="language-smarty">&lt;form method="post" action="{navigate name='posts.destroy' id=$post.id}">
+    {csrf_field}
+    {method_field method='DELETE'}
+    &lt;button>Delete&lt;/button>
+&lt;/form></code></pre>
+
+            <h2>Building responses</h2>
+<pre><code class="language-php">return view('posts/show', ['post' => $post]);                 // string → HTML 200
+return ['ok' => true];                                       // array → JSON 200
+return $post;                                                // Model/Collection/Paginator → JSON
+return json(['created' => $post->id], 201);
+return response('plain text', 200, ['Content-Type' => 'text/plain']);
+return response('')->withStatus(204)->header('X-Reason', 'none');
+return redirect('/somewhere');
+return redirect_route('posts.show', ['id' => $post->id]);
+return redirect_route('home', [], 301);
+return back();                                               // previous page
+return back('/fallback');</code></pre>
+            <p><code>back()</code> uses the <code>Referer</code> when it points at this host, then the last GET URL stored in the session, then the fallback. Foreign or protocol-relative URLs are never followed, which closes the open-redirect hole.</p>
+
+            <h2>The Response object</h2>
+<pre><code class="language-php">$response = new Response('body', 200, ['X-Thing' => 'value']);
+$response->header('Cache-Control', 'no-store');
+$response->withHeaders(['X-A' => 1, 'X-B' => 2]);
+$response->withStatus(202);
+$response->status; $response->body; $response->headers;   // public properties
+(string) $response;                                        // the body</code></pre>
+            <p>Header names are normalised (<code>content-type</code> becomes <code>Content-Type</code>). <code>send()</code> writes the status line explicitly, so non-standard codes such as 419 and 422 survive Apache, which would otherwise rewrite unknown codes to 500.</p>
+
+            <h2>Stopping with an error</h2>
+<pre><code class="language-php">abort(404);
+abort(403, 'Not yours');
+abort(503, 'Back soon', ['Retry-After' => '120']);
+abort_if($post->locked, 423);
+abort_unless(auth_check(), 401);</code></pre>
+            <p>These throw an <code>HttpException</code> that the handler renders as <code>views/errors/{status}.tpl</code>, the generic <code>errors/error.tpl</code>, or JSON. See <a href="errors-logging.html">Errors and logging</a>.</p>
+
+            <h2>Content negotiation</h2>
+            <p>Actions can serve both browsers and API clients:</p>
+<pre><code class="language-php">public function index()
+{
+    $posts = Post::latest()->paginate(20);
+
+    return wants_json() ? $posts : view('posts/index', ['posts' => $posts]);
+}</code></pre>
+            <p>Validation failures follow the same rule automatically: a redirect back for browsers, a 422 JSON payload for API clients.</p>
+
+            <h2>File uploads</h2>
+<pre><code class="language-php">$file = request_file('avatar');
+
+if ($file !== null && $file['error'] === UPLOAD_ERR_OK) {
+    $name = str_random(16) . '.' . pathinfo($file['name'], PATHINFO_EXTENSION);
+    move_uploaded_file($file['tmp_name'], BASE_PATH . '/storage/uploads/' . $name);
+}</code></pre>
+            <p>Keep uploads outside <code>assets/</code> unless they are meant to be public, and validate the type with your own checks (<code>mime_content_type()</code>) before trusting the file.</p>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

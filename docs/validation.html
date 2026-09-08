@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validation · YourApp Framework Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Validation</h1>
+            <p class="lead">One call validates input, redirects back with errors when it fails, and returns exactly the fields you asked for when it succeeds.</p>
+
+            <h2>validated()</h2>
+<pre><code class="language-php">$data = validated(input(), [
+    'name' => 'required|max:100',
+    'email' => 'required|email|unique:users,email',
+    'password' => 'required|min:8|confirmed',
+    'website' => 'nullable|url',
+], [
+    'email.unique' => 'That email is already registered.',
+]);
+
+User::create([...$data, 'password' => User::hashPassword($data['password'])]);</code></pre>
+            <p>On failure a <code>ValidationException</code> is thrown. The exception handler flashes the errors and the input (minus <code>_token</code>, <code>_method</code> and anything whose name contains "password") and redirects back; API clients receive a 422 JSON payload instead:</p>
+<pre><code class="language-php">{"message": "The given data was invalid.", "errors": {"email": ["The email must be a valid email address."]}}</code></pre>
+            <p>The returned array contains only the keys named in the rules (<code>password_confirmation</code> and any extra fields are dropped), so it is safe to pass to <code>Model::create()</code>.</p>
+
+            <h2>validate()</h2>
+            <p>Returns the error array instead of throwing, for cases where you handle failure yourself:</p>
+<pre><code class="language-php">$errors = validate($data, ['email' => 'required|email']);
+
+if ($errors !== []) {
+    return back_with_errors($errors);          // flashes errors + old input, redirects back
+}</code></pre>
+            <p>Errors are keyed by field; each value is a list of messages. Rules stop at the first failure per field, so a field has at most one message.</p>
+
+            <h2>Rules</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Rule</th><th>Passes when</th></tr>
+                <tr><td><code>required</code></td><td>Present and not empty (<code>null</code>, <code>''</code> and <code>[]</code> are empty; <code>'0'</code> is not).</td></tr>
+                <tr><td><code>present</code></td><td>The key exists, even if empty.</td></tr>
+                <tr><td><code>required_if:other,value</code></td><td>Required when <code>other</code> equals one of the values.</td></tr>
+                <tr><td><code>required_with:other</code>, <code>required_without:other</code></td><td>Required when <code>other</code> is (not) filled.</td></tr>
+                <tr><td><code>accepted</code></td><td><code>yes</code>, <code>on</code>, <code>1</code> or <code>true</code> (terms checkboxes).</td></tr>
+                <tr><td><code>nullable</code>, <code>sometimes</code></td><td><code>sometimes</code> skips every rule when the key is absent. Non-implicit rules already skip empty values, so <code>nullable</code> is documentation.</td></tr>
+                <tr><td><code>string</code>, <code>numeric</code>, <code>integer</code>, <code>boolean</code>, <code>array</code></td><td>Type checks. <code>boolean</code> accepts <code>0/1</code>, <code>'0'/'1'</code>, <code>'true'/'false'</code>.</td></tr>
+                <tr><td><code>email</code>, <code>url</code>, <code>ip</code>, <code>json</code></td><td>Format checks.</td></tr>
+                <tr><td><code>date</code>, <code>date_format:Y-m-d</code>, <code>before:date</code>, <code>after:date</code></td><td>Parsable date; exact format; ordering against a date or <code>strtotime()</code> expression.</td></tr>
+                <tr><td><code>alpha</code>, <code>alpha_num</code>, <code>alpha_dash</code></td><td>Unicode letters; plus digits; plus dashes and underscores.</td></tr>
+                <tr><td><code>digits:4</code></td><td>Exactly that many digits.</td></tr>
+                <tr><td><code>min:n</code>, <code>max:n</code>, <code>between:a,b</code>, <code>size:n</code></td><td>Length for strings, value for <code>numeric</code>/<code>integer</code> fields, item count for arrays.</td></tr>
+                <tr><td><code>in:a,b</code>, <code>not_in:a,b</code></td><td>Membership.</td></tr>
+                <tr><td><code>regex:/pattern/</code>, <code>not_regex:/pattern/</code></td><td>Pattern match. Use array syntax when the pattern contains <code>|</code>.</td></tr>
+                <tr><td><code>starts_with:a,b</code>, <code>ends_with:a,b</code></td><td>Prefix or suffix.</td></tr>
+                <tr><td><code>confirmed</code></td><td>Equals <code>{field}_confirmation</code>.</td></tr>
+                <tr><td><code>same:other</code>, <code>different:other</code></td><td>Compared with another field.</td></tr>
+                <tr><td><code>unique:table,column,exceptId,idColumn</code></td><td>No row has the value. Column defaults to the field name; pass the id to ignore on updates.</td></tr>
+                <tr><td><code>exists:table,column</code></td><td>A row has the value.</td></tr>
+            </table>
+            </div>
+            <p>Rules can be a pipe-separated string or an array; the array form is required when a rule's parameter contains <code>|</code>:</p>
+<pre><code class="language-php">'time' => ['required', 'regex:/^\d{2}:\d{2}$/'],
+'slug' => ['required', 'regex:/^(news|blog)-[a-z0-9-]+$/'],</code></pre>
+
+            <h2>Messages</h2>
+            <p>The default messages use the field name with underscores turned into spaces: "The first name field is required." Override per field and rule, or per rule:</p>
+<pre><code class="language-php">validated(input(), $rules, [
+    'name.required' => 'Please tell us your name.',
+    'max' => ':field is limited to :max characters.',
+]);</code></pre>
+            <p>Placeholders: <code>:field</code>, <code>:param</code> (first parameter), <code>:params</code>, <code>:min</code>, <code>:max</code>, <code>:other</code>, <code>:value</code>.</p>
+
+            <h2>Custom rules</h2>
+<pre><code class="language-php">// e.g. in middleware/ or a bootstrap file of your own
+validator_extend('even', fn ($value) => (int) $value % 2 === 0, 'The :field must be even.');
+
+validator_extend('slug_available', function ($value, array $params, array $data, string $field) {
+    return !Post::where('slug', $value)->exists();
+}, 'That slug is taken.');</code></pre>
+            <p>The callback receives the value, the rule's parameters, all the data, the field name and whether the field is numeric. Return <code>true</code> to pass.</p>
+
+            <h2>Displaying errors in templates</h2>
+            <p><code>$errors</code> and <code>$old</code> are available in every template automatically after a redirect back:</p>
+<pre><code class="language-smarty">&lt;input type="email" name="email" value="{$old.email|default:''}"
+       class="form-control{if isset($errors.email)} is-invalid{/if}">
+{if isset($errors.email)}
+    &lt;div class="invalid-feedback">{$errors.email.0}&lt;/div>
+{/if}</code></pre>
+
+            <h2>Manual validation flow</h2>
+<pre><code class="language-php">public function login()
+{
+    $data = validated(input(), ['email' => 'required|email', 'password' => 'required']);
+
+    if (!auth_attempt($data['email'], $data['password'], has_input('remember'))) {
+        return back_with_errors(['email' => ['Those credentials do not match our records.']]);
+    }
+
+    return auth_intended(route_url('account'));
+}</code></pre>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>
