@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, mbstring, curl, openssl
+          coverage: none
+          tools: composer
+
+      - name: Lint every PHP file
+        run: |
+          set -e
+          find . -name '*.php' -not -path './libs/*' -not -path './vendor/*' -not -path './bootstrap/cache/*' -print0 \
+            | xargs -0 -n1 -P4 php -l > /dev/null
+
+      - name: Prepare the environment
+        run: php install.php --no-interaction --db=sqlite --skip-key --no-migrate
+
+      - name: Run the test suite
+        run: php console.php test
+
+  phpstan:
+    name: PHPStan (level 6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, mbstring, curl, openssl
+          coverage: none
+          tools: composer, phpstan
+
+      - name: Prepare the environment
+        run: php install.php --no-interaction --db=sqlite --skip-key --no-migrate
+
+      - name: Analyse
+        run: phpstan analyse --no-progress --memory-limit=512M

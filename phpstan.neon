@@ -1,0 +1,44 @@
+# Static analysis: phpstan analyse   (composer global require phpstan/phpstan)
+#
+# The framework has no autoloader PHPStan understands, so core/bootstrap.php
+# is loaded first: it registers the class autoloader and defines every
+# procedural function (core/*.php, core/modules/*.php, helpers/, middleware/).
+# console.php cannot be executed (it dispatches a command), so its helper
+# functions are picked up through scanFiles instead.
+
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 6
+
+    paths:
+        - core
+        - controllers
+        - models
+        - policies
+        - helpers
+        - console
+        - console.php
+        - install.php
+
+    excludePaths:
+        - libs
+        - bootstrap/cache
+
+    bootstrapFiles:
+        - core/bootstrap.php
+
+    scanFiles:
+        - console.php
+        - core/testing.php
+
+    scanDirectories:
+        - libs/Smarty/libs
+
+    treatPhpDocTypesAsCertain: false
+
+    ignoreErrors:
+        # Procedural code passes arrays around; "array" without a value type
+        # is fine at this level.
+        - identifier: missingType.iterableValue

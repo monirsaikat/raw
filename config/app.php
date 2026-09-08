@@ -28,4 +28,8 @@ return [
 
     // Appends ?v=<mtime> to asset() URLs so long-lived browser caching is safe.
     'asset_versioning' => true,
+
+    // Debug toolbar on HTML pages (only when debug is true). Hide it for a
+    // single request with ?_toolbar=0, or in code with toolbar_disable().
+    'toolbar' => (bool) env('APP_TOOLBAR', true),
 ];

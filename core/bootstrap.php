@@ -43,6 +43,13 @@ require_once __DIR__ . '/authorization.php';
 require_once __DIR__ . '/throttle.php';
 require_once BASE_PATH . '/helpers/helpers.php';
 
+// Framework modules built on the core above (events, queue, mail, encryption,
+// signed URLs, HTTP caching, session drivers, debug toolbar). Files load in
+// name order, so the numeric prefix expresses dependencies.
+foreach (glob(__DIR__ . '/modules/*.php') ?: [] as $module) {
+    require_once $module;
+}
+
 // Container bindings (config/container.php) and the authorization gate
 // (config/auth.php policies + policies/gates.php).
 container_boot();

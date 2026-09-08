@@ -8,7 +8,7 @@ test('auth middleware redirects guests to login and remembers the intended URL',
     get('/account', fn () => 'secret', 'account', ['auth']);
 
     $_SERVER['REQUEST_URI'] = '/account';
-    $response = dispatch('GET', '/account');
+    $response = route_dispatch('GET', '/account');
 
     assert_true($response instanceof Response);
     assert_same(302, $response->status);
@@ -21,7 +21,7 @@ test('auth middleware answers 401 JSON for API clients', function () {
     get('/api/me', fn () => 'me', null, ['auth']);
     $_SERVER['HTTP_ACCEPT'] = 'application/json';
 
-    $e = assert_throws(fn () => dispatch('GET', '/api/me'), HttpException::class);
+    $e = assert_throws(fn () => route_dispatch('GET', '/api/me'), HttpException::class);
     assert_same(401, $e->status);
 });
 
@@ -29,13 +29,13 @@ test('guest middleware sends logged-in users home', function () {
     get('/', fn () => 'home', 'home');
     get('/login', fn () => 'login form', 'login', ['guest']);
 
-    assert_same('login form', dispatch('GET', '/login'));
+    assert_same('login form', route_dispatch('GET', '/login'));
 
     session_set('auth_id', 1);
     assert_true(auth_check());
     assert_same(1, auth_id());
 
-    $response = dispatch('GET', '/login');
+    $response = route_dispatch('GET', '/login');
     assert_same('/', $response->headers['Location']);
 });
 

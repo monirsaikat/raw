@@ -1,0 +1,30 @@
+{
+    "name": "comfreephp/comfreephp",
+    "description": "A small, dependency-free procedural + class PHP framework: routing, PDO query builder and models, Smarty views, auth, validation, migrations, tests and a console.",
+    "type": "project",
+    "license": "MIT",
+    "keywords": ["framework", "php", "procedural", "no-dependencies"],
+    "homepage": "https://github.com/comfreephp/comfreephp",
+    "require": {
+        "php": "^8.2",
+        "ext-pdo": "*",
+        "ext-mbstring": "*",
+        "ext-openssl": "*",
+        "ext-json": "*"
+    },
+    "suggest": {
+        "ext-pdo_sqlite": "Runs the test suite on an in-memory database",
+        "ext-curl": "Used by bench:http"
+    },
+    "scripts": {
+        "test": "php console.php test",
+        "lint": "find . -name '*.php' -not -path './libs/*' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l > /dev/null",
+        "analyse": "phpstan analyse --no-progress --memory-limit=512M",
+        "post-create-project-cmd": "php install.php --no-interaction"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

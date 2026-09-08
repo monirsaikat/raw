@@ -32,7 +32,7 @@ test('slugs are lower-case and dashed', function () {
 test('unknown routes are 404', function () {
     get('/only', fn () => 'ok');
 
-    $e = assert_throws(fn () => dispatch('GET', '/other'), HttpException::class);
+    $e = assert_throws(fn () => route_dispatch('GET', '/other'), HttpException::class);
     assert_same(404, $e->status);
 });</code></pre>
 <pre><code class="language-bash">php console.php test              # all files
@@ -98,7 +98,7 @@ test('the contact form stores a message', function () {
             <p>If <code>pdo_sqlite</code> is not available the database tests are skipped rather than run against MySQL. The <code>test</code> command loads the extension automatically when the DLL or shared object exists; otherwise set <code>DB_TEST_CONNECTION</code> to a throwaway connection defined in <code>config/database.php</code>.</p>
 
             <h2>Testing pieces in isolation</h2>
-<pre><code class="language-php">dispatch('GET', '/path');                                  // run the pipeline for a path, get the action's return value
+<pre><code class="language-php">route_dispatch('GET', '/path');                            // run the pipeline for a path, get the action's return value
 run_middleware(['throttle:2,1'], fn () => 'core');         // a middleware chain by itself
 render_exception(new HttpException(404));                  // the Response an exception would produce
 validate(['email' => 'x'], ['email' => 'required|email']); // the error array

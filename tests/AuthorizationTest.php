@@ -185,11 +185,11 @@ test('the can modifier works in templates and the can middleware guards routes',
     get('/admin', fn () => 'admin area', null, ['can:admin']);
     get('/posts/{id}/edit', fn ($id) => "edit $id", null, ['can:create,AzPost']);
 
-    assert_same('admin area', dispatch('GET', '/admin'));
-    assert_same('edit 3', dispatch('GET', '/posts/3/edit'));
+    assert_same('admin area', route_dispatch('GET', '/admin'));
+    assert_same('edit 3', route_dispatch('GET', '/posts/3/edit'));
 
     auth_set_user(az_user(2));
-    $e = assert_throws(fn () => dispatch('GET', '/admin'), AuthorizationException::class);
+    $e = assert_throws(fn () => route_dispatch('GET', '/admin'), AuthorizationException::class);
     assert_same(403, $e->status);
-    assert_same('edit 4', dispatch('GET', '/posts/4/edit'), 'members may create');
+    assert_same('edit 4', route_dispatch('GET', '/posts/4/edit'), 'members may create');
 });

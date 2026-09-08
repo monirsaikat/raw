@@ -215,7 +215,7 @@ function route_allowed_methods(string $path): array
     return $allowed;
 }
 
-function dispatch(string $method, string $path)
+function route_dispatch(string $method, string $path)
 {
     global $currentRoute;
 
@@ -259,7 +259,7 @@ function route(): void
     send_security_headers();
 
     $method = request_method();
-    $result = dispatch($method, request_path());
+    $result = route_dispatch($method, request_path());
 
     // Remember the last page for back() when a Referer is missing.
     if ($method === 'GET' && session_status() === PHP_SESSION_ACTIVE && !wants_json() && !request_is_ajax()) {

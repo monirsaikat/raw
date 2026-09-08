@@ -27,6 +27,3 @@ group(['middleware' => ['auth']], function () {
 group(['prefix' => '/api', 'name' => 'api.'], function () {
     get('/ping', 'ApiController@ping', 'ping');
 });
-
-// TEMP-BENCH-INFO
-get('/bench/info', fn () => json(['framework' => 'ComfreePHP', 'php' => PHP_VERSION, 'included_files' => count(get_included_files()), 'peak_memory_mb' => round(memory_get_peak_usage() / 1048576, 1)]));

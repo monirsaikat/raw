@@ -1,6 +1,18 @@
 <?php
 
 return [
+    // Where sessions are stored: 'file' (PHP's native handler), 'database'
+    // (the sessions table: php console.php session:table && migrate),
+    // 'cookie' (encrypted, 4 KB limit) or 'array' (memory only, for tests).
+    'driver' => env('SESSION_DRIVER', 'file'),
+
+    // Table and connection for the database driver (null = default connection).
+    'table' => env('SESSION_TABLE', 'sessions'),
+    'connection' => env('SESSION_CONNECTION'),
+
+    // Skip rewriting an unchanged session (saves a write per request).
+    'lazy_write' => (bool) env('SESSION_LAZY_WRITE', true),
+
     // Cookie name. Use a distinct name per app on a shared host.
     'name' => env('SESSION_NAME', 'comfreephp_session'),
 

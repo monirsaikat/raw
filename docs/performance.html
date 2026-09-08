@@ -70,16 +70,16 @@ php console.php bench:http http://localhost/myapp/api/ping --requests=1000 --con
             </div>
             <p>Peak memory for the whole run: 4 MB. The CLI bootstrap figure includes compiling every file because a CLI process starts with an empty opcode cache; under Apache the files are already cached, which is why a full home-page response arrives in about 6 ms including bootstrap and rendering (see the header above).</p>
 
-            <h3>End to end (ApacheBench, 1000 requests, 10 concurrent)</h3>
+            <h3>End to end (built-in curl client, 1000 requests, 10 concurrent)</h3>
             <div class="table-wrap">
             <table>
                 <tr><th>URL</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>Failed</th></tr>
-                <tr><td><code>/</code> home page: layout, session, CSRF token, Smarty</td><td>310 to 450</td><td>18 ms</td><td>42 to 51 ms</td><td>0</td></tr>
-                <tr><td><code>/contact</code> form page</td><td>490</td><td>20 ms</td><td>38 ms</td><td>0</td></tr>
-                <tr><td><code>/api/ping</code> JSON</td><td>700 to 900</td><td>8 ms</td><td>11 to 15 ms</td><td>0</td></tr>
+                <tr><td><code>/</code> home page: layout, session, CSRF token, Smarty</td><td>385</td><td>19.5 ms</td><td>37 ms</td><td>0</td></tr>
+                <tr><td><code>/contact</code> form page</td><td>335</td><td>18 ms</td><td>45 ms</td><td>0</td></tr>
+                <tr><td><code>/api/ping</code> JSON (no session: a request without a session cookie never starts one)</td><td>1,513</td><td>5.1 ms</td><td>7.2 ms</td><td>0</td></tr>
             </table>
             </div>
-            <p>Ranges cover several runs; Windows and the shared client account for the spread. The <code>X-Response-Time</code> header on the same pages reads 6 ms for the home page and 2 ms for the JSON endpoint, so most of the wall-clock time above is Apache, the network stack and PHP start-up rather than the framework.</p>
+            <p>Measured on 8 September 2026 on a machine that was also running other work, with the load client on the same machine. The <code>X-Response-Time</code> header on the same pages reads about 6 ms for the home page and under 2 ms for the JSON endpoint, so most of the wall-clock time above is Apache, the session file write, the network stack and the client rather than the framework. See the <a href="comparison.html">Comparison</a> page for the same endpoints next to Laravel, Symfony and plain PHP.</p>
 
             <h2>Comparing with other frameworks</h2>
             <p>The <a href="comparison.html">Comparison</a> page publishes measured numbers against Laravel, Symfony and plain PHP on the same machine, and <code>php console.php bench:compare name=url ...</code> runs the same alternating-round ApacheBench comparison against any set of URLs. The <code>benchmarks/</code> folder holds the equivalent routes and templates for the other frameworks plus a setup script, so anyone can reproduce the table on their own hardware.</p>
@@ -95,7 +95,7 @@ php console.php bench:http http://localhost/myapp/api/ping --requests=1000 --con
             <h2>Production settings that matter</h2>
             <ul>
                 <li><code>APP_DEBUG=false</code>: no query log, no debug page, no template compile checks.</li>
-                <li><code>opcache.enable=1</code>, and <code>opcache.validate_timestamps=0</code> on immutable deployments.</li>
+                <li><code>opcache.enable=1</code>, and <code>opcache.validate_timestamps=0</code> on immutable deployments. Check <code>opcache_get_status()['cache_full']</code> once after deploying: a full cache silently recompiles files on every request, and the common 128 MB default fills up when several applications share one server.</li>
                 <li><code>php console.php route:cache</code> after route changes.</li>
                 <li>Enable <code>mod_deflate</code> and <code>mod_expires</code>; the shipped <code>.htaccess</code> uses them when present, and <code>asset()</code> versions URLs so assets can be cached for a year.</li>
                 <li>Use <code>simplePaginate()</code> on very large tables to skip the COUNT query, and <code>cursor()</code> or <code>chunk()</code> for exports.</li>

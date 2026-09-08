@@ -47,6 +47,15 @@ function session_start_if_needed(): void
         ini_set('session.gc_maxlifetime', (string) ($lifetime * 60));
     }
 
+    // Skip the write when nothing changed (PHP's default); off means every
+    // request rewrites the session, which keeps last_activity exact.
+    ini_set('session.lazy_write', ($config['lazy_write'] ?? true) ? '1' : '0');
+
+    // Storage driver (file, database, cookie, array): core/modules/70-session-drivers.php.
+    if (function_exists('session_driver_install')) {
+        session_driver_install();
+    }
+
     session_start();
 
     // Idle timeout: a session untouched for `lifetime` minutes is discarded.

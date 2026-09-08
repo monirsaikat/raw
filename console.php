@@ -802,8 +802,8 @@ command('bench', 'Time the framework core in-process [--iterations=2000] [--json
         get("/items-$i/{id:\d+}/{slug?}", fn ($id) => $id, "items.$i");
     }
 
-    $measure('Route dispatch: static path (400 routes)', fn () => dispatch('GET', '/static-150'), $n);
-    $measure('Route dispatch: {id:\d+}/{slug?} path', fn () => dispatch('GET', '/items-150/42/hello'), $n);
+    $measure('Route dispatch: static path (400 routes)', fn () => route_dispatch('GET', '/static-150'), $n);
+    $measure('Route dispatch: {id:\d+}/{slug?} path', fn () => route_dispatch('GET', '/items-150/42/hello'), $n);
     $measure('route_url() with parameters', fn () => route_url('items.150', ['id' => 42, 'slug' => 'hello']), $n);
 
     $measure('Query builder: compile a 5-clause SELECT', fn () => Database::table('posts')
@@ -1241,6 +1241,12 @@ command('test', 'Run the test suite [optional filename filter]', function (array
 
     return run_tests($files);
 });
+
+// Additional command files: console/*.php, each calling command() one or
+// more times. Framework modules (queue, mail, ...) register theirs here.
+foreach (glob(BASE_PATH . '/console/*.php') ?: [] as $commandFile) {
+    require_once $commandFile;
+}
 
 // ------------------------------------------------------------------------
 

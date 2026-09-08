@@ -39,6 +39,16 @@ function log_message(string $level, string $message, array $context = []): void
         ? ''
         : ' ' . json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
 
+    // In debug mode keep the last entries in memory for the debug toolbar
+    // (tests opt in by initialising the buffer).
+    if ((defined('APP_DEBUG') && APP_DEBUG) || isset($GLOBALS['__log_buffer'])) {
+        $GLOBALS['__log_buffer'][] = ['level' => $level, 'message' => $message, 'context' => ltrim($suffix)];
+
+        if (count($GLOBALS['__log_buffer']) > 100) {
+            array_shift($GLOBALS['__log_buffer']);
+        }
+    }
+
     $line = sprintf(
         "[%s] %s.%s: %s%s\n",
         date('Y-m-d H:i:s'),
@@ -57,6 +67,12 @@ function log_message(string $level, string $message, array $context = []): void
     }
 
     @file_put_contents($directory . '/app-' . date('Y-m-d') . '.log', $line, FILE_APPEND | LOCK_EX);
+}
+
+// Entries recorded during this request (APP_DEBUG only): [level, message, context].
+function log_buffer(): array
+{
+    return $GLOBALS['__log_buffer'] ?? [];
 }
 
 function log_exception(Throwable $e, string $level = 'error'): void

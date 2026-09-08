@@ -28,6 +28,7 @@
                 <tr><td><code>serve [host:port]</code></td><td>Starts the built-in PHP server, default <code>127.0.0.1:8000</code>, serving assets directly and routing everything else through <code>index.php</code>.</td></tr>
                 <tr><td><code>test [filter]</code></td><td>Runs <code>tests/*.php</code>, or only files whose name contains the filter. Loads <code>pdo_sqlite</code> on demand if it is installed but disabled.</td></tr>
                 <tr><td><code>route:list</code></td><td>Prints method, path, name, action and middleware of every route.</td></tr>
+                <tr><td><code>php install.php [--no-interaction] [--db=sqlite|mysql] [--migrate]</code></td><td>Not a console command but a script in the project root: creates <code>.env</code>, generates the key, prepares <code>storage/</code> and optionally migrates. See <a href="tooling.html">Tooling</a>.</td></tr>
                 <tr><td><code>key:generate</code></td><td>Writes a random <code>APP_KEY</code> into <code>.env</code> (creating it from <code>.env.example</code> if needed).</td></tr>
             </table>
             </div>
@@ -58,14 +59,39 @@
                 <tr><td><code>make:seeder UserSeeder</code></td><td><code>database/seeders/UserSeeder.php</code></td></tr>
                 <tr><td><code>make:policy Post [--model=Post]</code></td><td><code>policies/PostPolicy.php</code> with viewAny/view/create/update/delete</td></tr>
                 <tr><td><code>make:middleware admin</code></td><td><code>middleware/admin.php</code></td></tr>
+                <tr><td><code>make:crud Post --fields=title:string,body:text,published:boolean [--force] [--routes]</code></td><td>A whole resource: model, migration, factory, policy, controller, five views and a test, plus the route lines to paste (or append with <code>--routes</code>). See <a href="tooling.html">Tooling</a>.</td></tr>
             </table>
             </div>
-            <p>Generators never overwrite an existing file.</p>
+            <p>Generators never overwrite an existing file (<code>make:crud</code> accepts <code>--force</code>).</p>
+
+            <h2>Queue, events and mail</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Command</th><th>Description</th></tr>
+                <tr><td><code>queue:work [queue] [--once] [--stop-when-empty] [--sleep=3] [--max-jobs=N] [--max-time=S] [--memory=128]</code></td><td>Runs jobs from the configured driver; <code>queue:listen</code> is an alias. See <a href="queue.html">Queue</a>.</td></tr>
+                <tr><td><code>queue:size [queue]</code>, <code>queue:failed</code>, <code>queue:retry &lt;id|all&gt;</code>, <code>queue:forget &lt;id&gt;</code>, <code>queue:flush [--jobs]</code></td><td>Inspect and manage pending and failed jobs.</td></tr>
+                <tr><td><code>make:job Name</code>, <code>make:listener Name [--event=user.registered] [--queued]</code>, <code>make:mail Name</code></td><td>Stubs in <code>jobs/</code>, <code>listeners/</code> and <code>mail/</code> (plus <code>views/mail/</code>).</td></tr>
+                <tr><td><code>event:list</code></td><td>Every registered event and its listeners.</td></tr>
+                <tr><td><code>mail:test &lt;address&gt;</code></td><td>Sends a test message through the configured mailer and prints the result. See <a href="mail.html">Mail</a>.</td></tr>
+            </table>
+            </div>
+
+            <h2>Performance</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Command</th><th>Description</th></tr>
+                <tr><td><code>bench [--iterations=2000] [--json]</code></td><td>Times the framework core in one process.</td></tr>
+                <tr><td><code>bench:http &lt;url&gt; [--requests=500] [--concurrency=10] [--ab] [--raw]</code></td><td>Load-tests a URL with the built-in curl client (or ApacheBench with <code>--ab</code>).</td></tr>
+                <tr><td><code>bench:compare name=url ... [--requests=1000] [--concurrency=10] [--runs=3] [--ab] [--json]</code></td><td>Compares several targets in alternating rounds. See <a href="performance.html">Performance</a> and <a href="comparison.html">Comparison</a>.</td></tr>
+            </table>
+            </div>
 
             <h2>Production</h2>
             <div class="table-wrap">
             <table>
                 <tr><th>Command</th><th>Description</th></tr>
+                <tr><td><code>security:check</code></td><td>Verifies the app key, debug flag, exposed <code>.env</code>, writable directories, cookie and HSTS settings, CSP and database credentials; exits 1 on a failure. See <a href="security.html">Security</a>.</td></tr>
+                <tr><td><code>session:table</code></td><td>Ensures the <code>sessions</code> migration exists for the database session driver.</td></tr>
                 <tr><td><code>route:cache</code></td><td>Compiles <code>routes/web.php</code> into <code>bootstrap/cache/routes.php</code>, used whenever <code>APP_DEBUG</code> is off. Refuses closure actions.</td></tr>
                 <tr><td><code>route:clear</code></td><td>Deletes the compiled table.</td></tr>
                 <tr><td><code>view:clear</code></td><td>Deletes compiled Smarty templates; run after deploying template changes.</td></tr>

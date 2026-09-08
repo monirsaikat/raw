@@ -75,7 +75,7 @@ test('global middleware runs before route middleware', function () {
     global_middleware(['g']);
     get('/x', fn () => 'x', null, ['r']);
 
-    assert_same('x', dispatch('GET', '/x'));
+    assert_same('x', route_dispatch('GET', '/x'));
     assert_same(['g', 'r'], $log);
 
     add_global_middleware('r');
@@ -107,10 +107,10 @@ test('throttle middleware answers 429 with a Retry-After header', function () {
     global_middleware([]);
     get($path, fn () => 'ok', null, ['throttle:2,1']);
 
-    assert_same('ok', dispatch('GET', $path));
-    assert_same('ok', dispatch('GET', $path));
+    assert_same('ok', route_dispatch('GET', $path));
+    assert_same('ok', route_dispatch('GET', $path));
 
-    $e = assert_throws(fn () => dispatch('GET', $path), HttpException::class);
+    $e = assert_throws(fn () => route_dispatch('GET', $path), HttpException::class);
     assert_same(429, $e->status);
     assert_key_exists('Retry-After', $e->headers);
 

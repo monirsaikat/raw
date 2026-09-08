@@ -61,8 +61,8 @@
             <ol>
                 <li>Apache rewrites the URL to <code>index.php</code> unless it names a real file (assets are served directly). The built-in server does the same through a check at the top of <code>index.php</code>.</li>
                 <li><code>index.php</code> loads bootstrap, then the route table: the compiled cache when <code>APP_DEBUG</code> is off and the cache exists, otherwise <code>routes/web.php</code>.</li>
-                <li><code>route()</code> starts output buffering, sends the security headers, and calls <code>dispatch()</code> with the request method (honouring <code>_method</code> spoofing) and the path relative to the base path.</li>
-                <li><code>dispatch()</code> finds the route: an O(1) lookup for static paths, then the pre-compiled regexes for dynamic ones. No match gives a 404, or a 405 with an <code>Allow</code> header when the path exists for other methods.</li>
+                <li><code>route()</code> starts output buffering, sends the security headers, and calls <code>route_dispatch()</code> with the request method (honouring <code>_method</code> spoofing) and the path relative to the base path.</li>
+                <li><code>route_dispatch()</code> finds the route: an O(1) lookup for static paths, then the pre-compiled regexes for dynamic ones. No match gives a 404, or a 405 with an <code>Allow</code> header when the path exists for other methods.</li>
                 <li>The global middleware (<code>csrf</code>) and the route's middleware run as an onion around the action.</li>
                 <li>The action is built and called through the container: constructor dependencies are injected, route parameters are mapped by position, parameters typed with a model class are loaded by key.</li>
                 <li>The return value is sent: a <code>Response</code> as is, an array or model or collection as JSON, a string as HTML.</li>

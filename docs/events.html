@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Events · ComfreePHP Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">C</span>ComfreePHP <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Events</h1>
+            <p class="lead">A small dispatcher for decoupling side effects from the code that triggers them: <code>event('user.registered', $user)</code> runs every listener registered for that name, in priority order, and returns what they produced. Listeners are closures, class names resolved through the container, or global functions. Module: <code>core/modules/10-events.php</code>.</p>
+
+            <h2>Firing events</h2>
+            <p>Events are plain strings with dots for namespacing, or objects. A string event passes its extra arguments to each listener; an object event passes the object itself as the single argument and is named after its class.</p>
+<pre><code class="language-php">$results = event('user.registered', $user, request_ip());   // every listener's return value, in order
+$first = event_until('payment.gateway', $order);          // stops at the first non-null result
+
+class OrderPaid { public function __construct(public Order $order) {} }
+event(new OrderPaid($order));                              // listeners receive the OrderPaid instance</code></pre>
+
+            <h2>Listening</h2>
+            <p><code>listen(event, listener, priority = 0)</code> registers a listener. Higher priorities run first; equal priorities keep registration order. Patterns with <code>*</code> match several names (<code>'user.*'</code>, or <code>'*'</code> for everything, handy for auditing).</p>
+<pre><code class="language-php">listen('user.registered', fn (User $user) => log_info('Registered {email}', ['email' => $user->email]));
+listen('user.*', 'AuditListener', 100);                     // AuditListener::handle(...$payload), built by the container
+listen('order.paid', 'OrderNotifier@sendReceipt');          // a specific method
+listen('cache.warm', 'warm_route_cache');                   // a global function
+
+listeners('user.registered');   // resolved list, wildcards included
+has_listeners('user.deleted');
+forget_listeners('user.*');     // one pattern; forget_listeners() clears all</code></pre>
+
+            <h2>Registering listeners at boot</h2>
+            <p>Application listeners live in <code>listeners/</code> (autoloaded) and are wired up in <code>config/events.php</code>, which the module reads once during bootstrap. Scaffold a class with <code>php console.php make:listener SendWelcomeMail --event=user.registered</code>; <code>event:list</code> shows what is registered.</p>
+<pre><code class="language-php">// config/events.php
+return [
+    'user.registered' => ['SendWelcomeMail', 'CreateDefaultSettings'],
+    'user.*' => ['AuditListener'],
+];
+
+// listeners/SendWelcomeMail.php
+class SendWelcomeMail
+{
+    public function handle(User $user): void
+    {
+        Mail::to($user->email)->send(new WelcomeMail($user->name));
+    }
+}</code></pre>
+            <p>Constructor dependencies of a listener class are injected by the <a href="container.html">container</a>, so a listener can type-hint a service the same way a controller does.</p>
+
+            <h2>Queued listeners</h2>
+            <p>When the <a href="queue.html">queue module</a> is installed, a listener class that implements the marker interface <code>ShouldQueue</code>, or declares <code>public bool $shouldQueue = true;</code>, is wrapped in a <code>QueuedListenerJob</code> and dispatched instead of running during the request. Without the queue module the same class runs inline, so app code does not change between the two setups.</p>
+<pre><code class="language-php">class SendWelcomeMail implements ShouldQueue
+{
+    public function handle(User $user): void { /* runs on the worker */ }
+}</code></pre>
+
+            <h2>Testing</h2>
+            <p><code>Event::fake()</code> disconnects the listeners and records every dispatch; <code>Event::restore()</code> puts the real dispatcher back. The assertion filters receive the payload arguments (the object for object events). Assertions throw a <code>TestFailure</code> inside the test runner.</p>
+<pre><code class="language-php">test('registration fires user.registered', function () {
+    Event::fake();
+
+    http_post('/register', [...]);
+
+    Event::assertDispatched('user.registered', fn (User $user) => $user->email === 'ann@example.com');
+    Event::assertNotDispatched('user.deleted');
+    Event::dispatched('user.*');           // [['event' => ..., 'payload' => [...]], ...]
+    Event::assertNothingDispatched();      // after Event::fake() with nothing fired
+
+    Event::restore();
+});</code></pre>
+            <p>Tests that register listeners of their own should call <code>forget_listeners()</code> in <code>after_each()</code>; the listener table is process-wide and is not reset between tests.</p>
+
+            <h2>Built-in events</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Event</th><th>Payload</th><th>Fired by</th></tr>
+                <tr><td><code>mail.sent</code></td><td><code>Mailable $mailable, MailMessage $message</code></td><td><code>Mail::send()</code> after the transport accepted the message</td></tr>
+            </table>
+            </div>
+
+            <h2>Reference</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Function</th><th>Description</th></tr>
+                <tr><td><code>listen(string $event, callable|string $listener, int $priority = 0)</code></td><td>Registers a listener; <code>*</code> wildcards allowed in the name.</td></tr>
+                <tr><td><code>event(string|object $event, mixed ...$payload): array</code></td><td>Runs the matching listeners and returns their results.</td></tr>
+                <tr><td><code>event_until(string|object $event, mixed ...$payload): mixed</code></td><td>Runs listeners until one returns non-null.</td></tr>
+                <tr><td><code>listeners(string $event): array</code></td><td>Listeners that would run for a name, in order.</td></tr>
+                <tr><td><code>has_listeners(string $event): bool</code></td><td>Whether anything listens.</td></tr>
+                <tr><td><code>forget_listeners(?string $event = null)</code></td><td>Clears one pattern or the whole table.</td></tr>
+                <tr><td><code>event_matches(string $pattern, string $event): bool</code></td><td>Wildcard matching used by the dispatcher.</td></tr>
+                <tr><td><code>events_boot()</code></td><td>Registers <code>config/events.php</code> (called during bootstrap).</td></tr>
+                <tr><td><code>Event::fake() / restore() / dispatched() / assertDispatched() / assertNotDispatched() / assertNothingDispatched()</code></td><td>Test helpers.</td></tr>
+            </table>
+            </div>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

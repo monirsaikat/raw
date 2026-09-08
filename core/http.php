@@ -283,19 +283,21 @@ function url_is_local(string $url): bool
 // JSON), string (as-is) or null (nothing).
 function send_response($result): void
 {
-    if ($result instanceof Response) {
-        $result->send();
-
+    if ($result === null) {
         return;
     }
 
-    if (is_array($result) || $result instanceof JsonSerializable) {
-        json($result)->send();
-
-        return;
+    if (!$result instanceof Response) {
+        $result = is_array($result) || $result instanceof JsonSerializable
+            ? json($result)
+            : new Response((string) $result);
     }
 
-    if ($result !== null) {
-        echo (string) $result;
+    // Debug toolbar (core/modules/90-toolbar.php): appends its panel to HTML
+    // pages when APP_DEBUG is on; a no-op otherwise.
+    if (APP_DEBUG && function_exists('toolbar_inject')) {
+        toolbar_inject($result);
     }
+
+    $result->send();
 }

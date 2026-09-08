@@ -175,15 +175,15 @@ test('csrf middleware blocks unsafe methods without a token', function () {
     post('/x', fn () => 'posted');
     get('/x', fn () => 'got');
 
-    $e = assert_throws(fn () => dispatch('POST', '/x'), HttpException::class);
+    $e = assert_throws(fn () => route_dispatch('POST', '/x'), HttpException::class);
     assert_same(419, $e->status);
 
     $_POST['_token'] = csrf_token();
-    assert_same('posted', dispatch('POST', '/x'));
+    assert_same('posted', route_dispatch('POST', '/x'));
 
     $_SERVER['REQUEST_METHOD'] = 'GET';
     unset($_POST['_token']);
-    assert_same('got', dispatch('GET', '/x'));
+    assert_same('got', route_dispatch('GET', '/x'));
 });
 
 test('send_response serialises arrays and models as JSON and echoes strings', function () {

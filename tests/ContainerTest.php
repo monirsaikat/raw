@@ -227,8 +227,8 @@ test('config/container.php bindings are loaded by container_boot and flush() res
 test('controllers get constructor and method injection; optional segments keep defaults', function () {
     get('/show/{id}/{tab?}', 'CtController@show');
 
-    assert_same('show:9:main:noreply@example.com', dispatch('GET', '/show/9'));
-    assert_same('show:9:edit:noreply@example.com', dispatch('GET', '/show/9/edit'));
+    assert_same('show:9:main:noreply@example.com', route_dispatch('GET', '/show/9'));
+    assert_same('show:9:edit:noreply@example.com', route_dispatch('GET', '/show/9/edit'));
 });
 
 test('class-based middleware is built by the container', function () {
@@ -236,6 +236,6 @@ test('class-based middleware is built by the container', function () {
     middleware('tagged', CtMiddleware::class);
     get('/m', fn () => 'core', null, ['tagged:one']);
 
-    assert_same('[one:core]', dispatch('GET', '/m'));
+    assert_same('[one:core]', route_dispatch('GET', '/m'));
     assert_same(['one'], app(CtLogger::class)->lines);
 });

@@ -22,7 +22,12 @@
             <p class="lead">ComfreePHP, Laravel 13, Symfony 7.4 and plain PHP serving the same two endpoints from the same Apache, the same PHP 8.3 and the same OPcache, measured on 8 September 2026. Every number on this page comes from one script and one console command that you can run yourself.</p>
 
             <h2>The short version</h2>
-            <!-- @@summary@@ -->
+            <ul>
+                <li><strong>JSON endpoints:</strong> ComfreePHP answers in 2.2 ms on a single client, Symfony in 4.1 ms and Laravel in 8.1 ms. Under 10 concurrent clients that is 1,850 requests per second against 1,010 for Symfony and 530 for Laravel, so ComfreePHP does about 1.8 times Symfony's throughput and 3.5 times Laravel's.</li>
+                <li><strong>Full pages with a session and a CSRF token:</strong> ComfreePHP and Symfony are level (7.7 ms against 7.5 ms per request, 304 against 330 requests per second) while ComfreePHP renders a page three times larger; Laravel is behind at 11.3 ms and 209 requests per second, with a long tail of stalls from its session garbage collection.</li>
+                <li><strong>Footprint:</strong> a ComfreePHP request loads 27 PHP files; Symfony loads 195 and Laravel 383.</li>
+                <li><strong>Plain PHP is still faster</strong> than every framework, by a factor of two on pages and four on JSON. That gap is the price of routing, middleware, escaping, sessions and CSRF, and the point of this page is that ComfreePHP keeps it small.</li>
+            </ul>
 
             <h2>What was measured</h2>
             <p>Two endpoints that every web framework has to serve, implemented as idiomatically as possible in each one:</p>
@@ -42,7 +47,10 @@
             <div class="table-wrap">
             <table>
                 <tr><th>Target</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Failed</th><th>Relative</th></tr>
-<!-- @@page-c10@@ -->
+                <tr><td>Plain PHP</td><td>403</td><td>10.87 ms</td><td>27.16 ms</td><td>38.24 ms</td><td>0</td><td>100%</td></tr>
+                <tr><td>Symfony 7.4</td><td>330</td><td>19.3 ms</td><td>44.79 ms</td><td>56.63 ms</td><td>0</td><td>82%</td></tr>
+                <tr class="highlight"><td>ComfreePHP</td><td>304</td><td>19.44 ms</td><td>42.12 ms</td><td>54.27 ms</td><td>0</td><td>76%</td></tr>
+                <tr><td>Laravel 13</td><td>209</td><td>25.09 ms</td><td>51.84 ms</td><td>689.13 ms</td><td>0</td><td>52%</td></tr>
             </table>
             </div>
             <p>ComfreePHP's page is the framework's real home page (6.2 KB of Bootstrap markup with a navigation bar, alerts include and footer); the other three render a minimal 2.2 KB page with the same data. That makes this row conservative for ComfreePHP.</p>
@@ -51,7 +59,10 @@
             <div class="table-wrap">
             <table>
                 <tr><th>Target</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Failed</th><th>Relative</th></tr>
-<!-- @@json-c10@@ -->
+                <tr><td>Plain PHP</td><td>4,104</td><td>1.99 ms</td><td>2.52 ms</td><td>3.45 ms</td><td>0</td><td>100%</td></tr>
+                <tr class="highlight"><td>ComfreePHP</td><td>1,846</td><td>4.29 ms</td><td>6.6 ms</td><td>8.6 ms</td><td>0</td><td>45%</td></tr>
+                <tr><td>Symfony 7.4</td><td>1,010</td><td>7.01 ms</td><td>11.72 ms</td><td>13.81 ms</td><td>0</td><td>25%</td></tr>
+                <tr><td>Laravel 13</td><td>533</td><td>12.89 ms</td><td>18.51 ms</td><td>23.01 ms</td><td>0</td><td>13%</td></tr>
             </table>
             </div>
 
@@ -60,13 +71,19 @@
             <div class="table-wrap">
             <table>
                 <tr><th>Page</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Failed</th><th>Relative</th></tr>
-<!-- @@page-c1@@ -->
+                <tr><td>Plain PHP</td><td>265</td><td>3.32 ms</td><td>6.23 ms</td><td>9.07 ms</td><td>0</td><td>100%</td></tr>
+                <tr><td>Symfony 7.4</td><td>122</td><td>7.48 ms</td><td>12.61 ms</td><td>15.88 ms</td><td>0</td><td>46%</td></tr>
+                <tr class="highlight"><td>ComfreePHP</td><td>119</td><td>7.72 ms</td><td>12.58 ms</td><td>17.61 ms</td><td>0</td><td>45%</td></tr>
+                <tr><td>Laravel 13</td><td>75</td><td>11.32 ms</td><td>18.48 ms</td><td>66.31 ms</td><td>0</td><td>28%</td></tr>
             </table>
             </div>
             <div class="table-wrap">
             <table>
                 <tr><th>JSON</th><th>Requests / second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Failed</th><th>Relative</th></tr>
-<!-- @@json-c1@@ -->
+                <tr><td>Plain PHP</td><td>1,613</td><td>0.54 ms</td><td>0.91 ms</td><td>1.66 ms</td><td>0</td><td>100%</td></tr>
+                <tr class="highlight"><td>ComfreePHP</td><td>410</td><td>2.15 ms</td><td>3.69 ms</td><td>6.17 ms</td><td>0</td><td>25%</td></tr>
+                <tr><td>Symfony 7.4</td><td>231</td><td>4.07 ms</td><td>6.68 ms</td><td>10.03 ms</td><td>0</td><td>14%</td></tr>
+                <tr><td>Laravel 13</td><td>112</td><td>8.13 ms</td><td>14.28 ms</td><td>20.44 ms</td><td>0</td><td>7%</td></tr>
             </table>
             </div>
 
@@ -75,16 +92,22 @@
             <div class="table-wrap">
             <table>
                 <tr><th>Target</th><th>Version</th><th>PHP files loaded</th><th>Peak memory</th></tr>
-<!-- @@footprint@@ -->
+                <tr class="highlight"><td>ComfreePHP</td><td>0.9.0</td><td>27</td><td>0.4 MB</td></tr>
+                <tr><td>Laravel</td><td>13.30.1</td><td>383</td><td>4 MB</td></tr>
+                <tr><td>Symfony</td><td>7.4.18</td><td>195</td><td>4 MB</td></tr>
+                <tr><td>Plain PHP</td><td>8.3.31</td><td>1</td><td>2 MB</td></tr>
             </table>
             </div>
 
             <h3>Cross-check with ApacheBench</h3>
-            <p>The tables above use the built-in curl client of <code>bench:compare</code>. Running the same comparison with <code>--ab</code> (ApacheBench 2.4.58) ranks the four targets in the same order; the absolute numbers are lower because ab on Windows is slower than the servers it is measuring and does not keep connections alive.</p>
+            <p>The tables above use the built-in curl client of <code>bench:compare</code>. Running the same comparison with <code>--ab</code> (ApacheBench 2.4.58) ranks the four targets the same way. The absolute numbers differ because ab opens a new connection per request and, on Windows, is often slower than the servers it measures.</p>
             <div class="table-wrap">
             <table>
                 <tr><th>ApacheBench, 10 concurrent</th><th>Page req/s</th><th>Page median</th><th>JSON req/s</th><th>JSON median</th></tr>
-<!-- @@ab-crosscheck@@ -->
+                <tr class="highlight"><td>ComfreePHP</td><td>377</td><td>19 ms</td><td>1,818</td><td>5 ms</td></tr>
+                <tr><td>Laravel 13</td><td>191</td><td>26 ms</td><td>532</td><td>18 ms</td></tr>
+                <tr><td>Symfony 7.4</td><td>388</td><td>17 ms</td><td>1,092</td><td>8 ms</td></tr>
+                <tr><td>Plain PHP</td><td>392</td><td>10 ms</td><td>3,516</td><td>3 ms</td></tr>
             </table>
             </div>
 
@@ -101,6 +124,7 @@
             <ul>
                 <li><strong>This measures framework overhead, not applications.</strong> A real page spends most of its time in the database and the network, where all four are equal. The overhead matters when you serve many small requests, run on small hardware, or pay per CPU second.</li>
                 <li><strong>Every page request writes a session file</strong> in all four applications, because every request from the load client is a new visitor. On Windows with real-time antivirus scanning that write costs several milliseconds and is the floor under the page numbers. ComfreePHP's JSON endpoint writes nothing because a request without a session cookie never starts a session; Laravel's is registered outside the session middleware and Symfony's sessions are lazy, so the JSON rows compare framework bootstrap and routing alone.</li>
+                <li><strong>Laravel's long tail is its session garbage collector</strong>: the file session driver runs a full sweep of the session directory on 2% of requests, and every load-test request creates a new session file, so the 99th percentile grows with the length of the run. We emptied the session stores before each run; a real site sees this only under a burst of new visitors.</li>
                 <li><strong>Laravel's page goes through its full <code>web</code> stack</strong> (cookie encryption, session, CSRF verification, view rendering), which is what a Laravel page does in production. Symfony's stateless CSRF tokens change length between responses, which makes ApacheBench report "failed" requests; <code>bench:compare</code> subtracts those, and the curl client never counted them.</li>
                 <li><strong>Windows numbers are lower than Linux numbers</strong> for everyone: process-per-thread PHP, slower file I/O, antivirus scanning. Rankings on Linux are the same in our experience, with a larger absolute gap; run the script there to see your own.</li>
                 <li><strong>Feature breadth is not measured.</strong> Laravel and Symfony ship far more (queues, mail, an ORM with migrations for every database, a huge package ecosystem). ComfreePHP covers the core a typical application uses and stays small on purpose; that is where its speed comes from.</li>

@@ -21,7 +21,7 @@ test('view() renders app templates with the standard globals', function () {
 test('template plugins: navigate, url, asset, csrf_field, route_is', function () {
     get('/user/{id}', fn () => '', 'user');
     get('/', fn () => '', 'home');
-    dispatch('GET', '/');
+    route_dispatch('GET', '/');
 
     $tpl = View::instance()->smarty()->createTemplate(
         'string:{navigate name="user" id=5}|{url path="x"}|{if "home"|route_is}active{/if}|{if "nope"|route_is}wrong{/if}|{csrf_field}|{asset path="assets/css/app.css"}'

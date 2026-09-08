@@ -330,7 +330,7 @@ function http_request(string $method, string $uri, array $data = [], array $head
     $exception = null;
 
     try {
-        $result = dispatch(request_method(), request_path());
+        $result = route_dispatch(request_method(), request_path());
     } catch (Throwable $e) {
         $exception = $e;
         $result = render_exception($e);

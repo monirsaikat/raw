@@ -96,17 +96,37 @@ function auth_attempt(string $username, string $password, bool $remember = false
     // and a wrong password take the same time (no account enumeration).
     $hash = $user['password'] ?? auth_dummy_hash();
 
-    if (!password_verify($password, $hash) || $user === null) {
+    if (!auth_verify($password, $hash) || $user === null) {
         return false;
     }
 
-    if (password_needs_rehash($hash, PASSWORD_DEFAULT)) {
-        $user->forceFill(['password' => password_hash($password, PASSWORD_DEFAULT)])->save();
+    // Transparent upgrade when PHP's default algorithm or cost changes.
+    if (auth_needs_rehash($hash) && array_key_exists('password', $user->getAttributes())) {
+        $user->forceFill(['password' => auth_hash($password)])->save();
     }
 
     auth_login($user, $remember);
 
     return true;
+}
+
+// ------------------------------------------------------------- passwords --
+// Wrappers around password_hash()/password_verify() so the algorithm and
+// options live in one place (config('auth.password_options')).
+
+function auth_hash(string $plain): string
+{
+    return password_hash($plain, PASSWORD_DEFAULT, (array) config('auth.password_options', []));
+}
+
+function auth_verify(string $plain, string $hash): bool
+{
+    return password_verify($plain, $hash);
+}
+
+function auth_needs_rehash(string $hash): bool
+{
+    return password_needs_rehash($hash, PASSWORD_DEFAULT, (array) config('auth.password_options', []));
 }
 
 function auth_dummy_hash(): string

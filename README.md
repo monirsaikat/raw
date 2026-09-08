@@ -405,11 +405,17 @@ Settings: `config/auth.php`.
 ## Sessions, flash, cache, throttling
 
 Sessions start lazily on first use (`session_get/set/has/pull/forget`), rotate
-on login, and expire after `SESSION_LIFETIME` idle minutes. `flash('success',
+on login, and expire after `SESSION_LIFETIME` idle minutes. `SESSION_DRIVER`
+picks the storage: `file` (default), `database` (the `sessions` table:
+`session:table`, then `migrate`), `cookie` (encrypted with `APP_KEY`, 4 KB
+limit) or `array` (memory, for tests). `flash('success',
 'Saved')` shows on the next request via `views/includes/alerts.tpl`;
 `flash_now()` for the current one. `cache_remember('key', 3600, fn () => …)`,
 `cache_get/set/forget/flush`. `['throttle:5,1']` limits a route to 5 requests
-per minute per IP and answers 429 with `Retry-After`.
+per minute per IP and answers 429 with `Retry-After`. Per-route HTTP caching:
+`['cache.headers:public,max_age=3600,etag']` (Cache-Control, ETag, 304 on
+`If-None-Match`/`If-Modified-Since`) and `['cache.response:600']` (whole GET
+responses in the file cache, skipped for logged-in visitors and flash).
 
 ## Middleware
 
@@ -453,6 +459,7 @@ serve [host:port]        route:list  route:cache  route:clear
 migrate [--seed]  migrate:rollback [--step=N]  migrate:reset  migrate:fresh [--seed] [--force]  migrate:status
 db:seed [--class=]  db:show [connection]  db:table <name>
 make:controller  make:model [-m] [-f] [-c]  make:factory  make:middleware  make:migration [--create=|--table=|--sql]  make:policy [--model=]  make:seeder
+make:crud Name [--fields=title:string,body:text] [--force] [--routes]
 view:clear  cache:clear  key:generate  test [filter]
 ```
 
@@ -516,9 +523,116 @@ bash benchmarks/setup.sh /path/to/bench          # installs Laravel + Symfony wi
 php console.php bench:compare comfree=http://localhost/app/ laravel=http://localhost/bench/laravel/public/bench/page
 ```
 
+## Queue
+
+Jobs are classes in `jobs/` extending `Job` with a `handle()` method (scaffold
+with `make:job`); `dispatch(new SendWelcomeEmail($user->id))` pushes one,
+`dispatch_later(300, $job)` delays it, `dispatch_sync($job)` runs it inline.
+`QUEUE_CONNECTION=sync` (default) executes jobs immediately; `database` stores
+them in the `jobs` table (run `migrate`) for `php console.php queue:work`,
+which retries per the job's `$tries`/`$backoff`, moves exhausted jobs to
+`failed_jobs` and calls `failed()`. Inspect them with `queue:failed`,
+`queue:retry <id|all>`, `queue:forget`, `queue:flush` and `queue:size`.
+Supervise the worker with systemd or drain it from cron with
+`--stop-when-empty`; in tests `Queue::fake()` plus `Queue::assertPushed()`
+records dispatches without running them. Details: `docs/queue.html`.
+
+## Encryption and signed URLs
+
+`APP_KEY` drives an AES-256-GCM encrypter: `encrypt($value)` / `decrypt($payload)`
+(throws `DecryptException` on a tampered or foreign payload),
+`encrypt_string` / `decrypt_string`. `cookie('theme', 'dark', $minutes)` writes
+an encrypted, HttpOnly cookie and `cookie_get('theme')` reads it back (null when
+tampered); `cookie_forget()`. `signed_url('unsubscribe', ['id' => 5], 3600)` /
+`signed_path()` append an HMAC `signature` (and `expires`) to a named route's
+URL; the `signed` middleware answers 403 for an invalid or expired link.
+`php console.php security:check` audits APP_KEY, debug mode, `.env` exposure,
+writable directories, cookie/HSTS/CSP settings and database credentials, and
+exits 1 on any failure.
+
+## Events
+
+`listen('user.registered', fn ($user) => ...)` registers a listener and
+`event('user.registered', $user)` runs every match (wildcards such as
+`'user.*'`, priorities, object events by class name) and returns their
+results; `event_until()` stops at the first non-null one. Class listeners
+in `listeners/` are built by the container and wired up in
+`config/events.php`; a listener implementing `ShouldQueue` runs on the
+queue when that module is installed. `php console.php make:listener Name
+--event=...` scaffolds one and `Event::fake()` / `Event::assertDispatched()`
+cover tests. Docs: `docs/events.html`.
+
+## Mail
+
+Emails are `Mailable` classes in `mail/` (`php console.php make:mail Name`)
+rendered from Smarty templates in `views/mail/`, sent with
+`Mail::to($address)->send(new WelcomeMail($name))`, `Mail::raw()` or
+`Mail::queue()`. Transports in `config/mail.php`: a raw-socket SMTP client
+(STARTTLS, AUTH LOGIN/PLAIN, attachments), PHP `mail()`, the log file
+(development default) and an in-memory array. `Mail::fake()` with
+`Mail::assertSent(WelcomeMail::class, fn ($m) => $m->hasTo(...))` covers
+tests, and `php console.php mail:test you@example.com` checks a live
+setup. Docs: `docs/mail.html`.
+
+## Debug toolbar
+
+With `APP_DEBUG=true` every HTML page ends with a collapsible panel: response
+time, peak memory, queries (with bindings and time; slow ones highlighted per
+`DB_SLOW_QUERY_MS`), the matched route and its middleware, method/path/status,
+the user id, included files and the log lines of the request. Session keys
+are listed with truncated values; tokens and secrets are hidden. It is
+injected by `send_response()` before `</body>`, only for HTML pages with a
+2xx/3xx status that are not redirects, with inline CSP-nonced assets. Hide it
+with `?_toolbar=0`, `toolbar_disable()` in an action, or `APP_TOOLBAR=false`
+(`config('app.toolbar')`). Off entirely when `APP_DEBUG` is false.
+
+## Scaffolding a resource
+
+```bash
+php console.php make:crud Post --fields=title:string,body:text,published:boolean,summary:text?
+```
+
+Writes `models/Post.php` (fillable, casts), a `create_posts_table` migration,
+`PostFactory`, `PostPolicy` (read for everyone, write for logged-in users),
+`PostsController` (index/show/create/store/edit/update/destroy with
+`validated()`, route model binding and `authorize()`), five Smarty views in
+`views/posts/` extending the layout, and `tests/PostsTest.php`. It prints the
+route lines to paste into `routes/web.php` (`--routes` appends them). Types:
+`string`, `text`, `integer`, `boolean`, `float`, `date`, `datetime`; `?` makes
+a column nullable. Existing files are kept unless `--force` is given.
+
+## Installing
+
+```bash
+php install.php                                  # interactive: name, database, key, migrations
+php install.php --no-interaction --db=sqlite --migrate
+bash create-project.sh ../my-app --db=sqlite     # new app from this checkout, then install
+```
+
+`install.php` creates `.env` from `.env.example`, writes the answers into it,
+prepares `storage/` and `bootstrap/cache`, runs `key:generate` and optionally
+`migrate`. `composer.json` declares no dependencies (PHP and extensions only)
+and offers `composer test`, `composer lint` and `composer analyse`.
+
+## CI and static analysis
+
+`.github/workflows/tests.yml` lints every file, installs a SQLite `.env` and
+runs the test suite on PHP 8.2, 8.3 and 8.4, then PHPStan. Locally:
+
+```bash
+composer global require phpstan/phpstan
+phpstan analyse                                  # level 6, phpstan.neon
+```
+
+`phpstan.neon` bootstraps `core/bootstrap.php` so the procedural functions
+are known, scans `console.php` for the console helpers, and includes
+`phpstan-baseline.neon` with the findings in the existing code; regenerate
+it with `--generate-baseline` after fixing some. The version is in `VERSION`
+and changes are tracked in `CHANGELOG.md`. Details: `docs/tooling.html`.
+
 ## Production checklist
 
-- `APP_DEBUG=false`, `APP_ENV=production`, a real `APP_KEY`.
+- `APP_DEBUG=false`, `APP_ENV=production`, a real `APP_KEY`; run `php console.php security:check`.
 - `php console.php route:cache` after deploying route changes; `view:clear`
   after template changes (compile checks are off in production).
 - Enable OPcache (`opcache.enable=1`, `opcache.validate_timestamps=0` on

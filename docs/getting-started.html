@@ -30,10 +30,10 @@
             <p>Nothing is installed through Composer. Smarty lives in <code>libs/</code> and Bootstrap in <code>assets/vendor/</code>.</p>
 
             <h2>Install</h2>
-<pre><code class="language-bash">cp .env.example .env
-php console.php key:generate     # signs remember-me tokens
+<pre><code class="language-bash">php install.php                  # asks for the app name and database, writes .env, generates the key
 php console.php migrate          # creates the tables
 php console.php serve            # http://127.0.0.1:8000</code></pre>
+            <p>Or by hand: <code>cp .env.example .env</code>, then <code>php console.php key:generate</code>. To start a new application from this checkout, <code>bash create-project.sh ../my-app</code> copies the skeleton and runs the installer there (see <a href="tooling.html">Tooling</a>).</p>
             <p>Edit <code>.env</code> first: set <code>APP_NAME</code>, the <code>DB_*</code> values and, while developing, <code>APP_DEBUG=true</code>. Under XAMPP the project also runs straight from <code>htdocs</code>, for example at <code>http://localhost/saikat/test1/</code>; the <code>.htaccess</code> file routes every request through <code>index.php</code> and the base path is detected automatically.</p>
 
             <div class="note"><p><strong>Debug mode</strong> shows exception pages with code and stack traces and re-compiles templates whenever they change. Turn it off in production and run <code>console view:clear</code> after deploying template changes.</p></div>

@@ -30,7 +30,7 @@
                 <tr><td><code>url($path)</code>, <code>app_url()</code>, <code>base_path()</code></td><td>Base-path-aware URL, absolute root URL, the sub-directory prefix</td></tr>
                 <tr><td><code>current_route()</code>, <code>current_route_name()</code>, <code>route_is(...$patterns)</code></td><td>The matched route</td></tr>
                 <tr><td><code>route_parameter($name, $default)</code>, <code>route_parameters()</code></td><td>Matched parameter values</td></tr>
-                <tr><td><code>dispatch($method, $path)</code></td><td>Run the pipeline and return the action result</td></tr>
+                <tr><td><code>route_dispatch($method, $path)</code></td><td>Run the pipeline and return the action result</td></tr>
             </table></div>
 
             <h2>Request</h2>
@@ -84,9 +84,25 @@
             <h2>Authentication and authorization</h2>
             <div class="table-wrap"><table>
                 <tr><td><code>auth_user()</code>, <code>auth_id()</code>, <code>auth_check()</code>, <code>auth_guest()</code></td><td>Current user</td></tr>
+                <tr><td><code>auth_hash($plain)</code>, <code>auth_verify($plain, $hash)</code></td><td>Password hashing; logins rehash automatically when the algorithm changes</td></tr>
                 <tr><td><code>auth_attempt($username, $password, $remember)</code>, <code>auth_login($user, $remember)</code>, <code>auth_logout()</code>, <code>auth_intended($default)</code></td><td>Login flow</td></tr>
                 <tr><td><code>can()</code>, <code>cannot()</code>, <code>can_any()</code>, <code>authorize()</code></td><td>Checks for the current user</td></tr>
                 <tr><td><code>gate()</code>, <code>gate_define()</code>, <code>gate_policy()</code>, <code>gate_before()</code>, <code>gate_after()</code></td><td>Gate configuration</td></tr>
+            </table></div>
+
+            <h2>Events, queue and mail</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>listen($event, $listener, $priority)</code>, <code>event($event, ...$payload)</code>, <code>event_until()</code>, <code>listeners($event)</code>, <code>forget_listeners()</code></td><td>Event dispatcher; wildcards such as <code>user.*</code>. See <a href="events.html">Events</a></td></tr>
+                <tr><td><code>dispatch(Job $job)</code>, <code>dispatch_later($seconds, $job)</code>, <code>dispatch_sync($job)</code></td><td>Push a job onto the queue. See <a href="queue.html">Queue</a></td></tr>
+                <tr><td><code>mailer($name)</code>, <code>Mail::to()->send()</code>, <code>Mail::queue()</code>, <code>Mail::raw()</code></td><td>Send mail. See <a href="mail.html">Mail</a></td></tr>
+            </table></div>
+
+            <h2>Encryption, cookies, signed URLs, HTTP caching</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>encrypt($value)</code>, <code>decrypt($payload)</code>, <code>encrypt_string()</code>, <code>decrypt_string()</code></td><td>AES-256-GCM with <code>APP_KEY</code>; <code>DecryptException</code> on tamper</td></tr>
+                <tr><td><code>cookie($name, $value, $minutes, $options)</code>, <code>cookie_get($name)</code>, <code>cookie_has()</code>, <code>cookie_forget()</code></td><td>Encrypted cookies</td></tr>
+                <tr><td><code>signed_url($route, $params, $expiresIn)</code>, <code>signed_path()</code>, <code>signed_url_temporary()</code>, <code>signed_url_valid()</code></td><td>HMAC-signed URLs; the <code>signed</code> middleware rejects invalid ones</td></tr>
+                <tr><td><code>cache.headers:public,max_age=3600,etag</code>, <code>cache.response:ttl</code>, <code>response_cache_forget($url)</code></td><td>Caching middleware. See <a href="security.html">Security</a> and <a href="sessions-cache.html">Sessions and cache</a></td></tr>
             </table></div>
 
             <h2>Container and middleware</h2>
@@ -103,6 +119,7 @@
                 <tr><td><code>app_name()</code>, <code>is_debug()</code></td><td>Shortcuts</td></tr>
                 <tr><td><code>log_debug / log_info / log_notice / log_warning / log_error / log_critical ($message, $context)</code>, <code>log_message($level, ...)</code>, <code>log_exception($e)</code></td><td>Logging</td></tr>
                 <tr><td><code>dump(...$values)</code>, <code>dd(...$values)</code></td><td>Debug output</td></tr>
+                <tr><td><code>log_buffer()</code>, <code>toolbar_disable()</code></td><td>This request's log lines (debug mode) and the debug toolbar switch</td></tr>
             </table></div>
 
             <h2>Strings, dates, collections, fake data</h2>

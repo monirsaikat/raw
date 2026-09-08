@@ -30,6 +30,24 @@ session_invalidate();              // wipe data and rotate the ID</code></pre>
             <p>Nothing is started until the first call, so a request that never touches the session pays nothing. Settings live in <code>config/session.php</code>: cookie name (<code>SESSION_NAME</code>), idle timeout in minutes (<code>SESSION_LIFETIME</code>, 0 disables), path, domain, <code>SameSite=Lax</code>, and the <code>Secure</code> flag (forced by <code>SESSION_SECURE_COOKIE</code>, and set automatically on HTTPS). Cookies are always <code>HttpOnly</code>; PHP's strict mode rejects unknown session IDs.</p>
             <p>Under the CLI (console commands, tests) <code>$_SESSION</code> is a plain array, so the same code runs without a web server.</p>
 
+            <h2>Session drivers</h2>
+            <p><code>SESSION_DRIVER</code> chooses where session data lives. The handler is registered with <code>session_set_save_handler()</code> just before the session starts, so every driver keeps the lazy start, strict mode and idle timeout above.</p>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Driver</th><th>Storage</th><th>When</th></tr>
+                <tr><td><code>file</code> (default)</td><td>PHP's native files in <code>session.save_path</code></td><td>Single server. Nothing to set up.</td></tr>
+                <tr><td><code>database</code></td><td>The <code>sessions</code> table: id, payload, last_activity, user_id, ip_address, user_agent</td><td>Several web servers, or when you want to list a user's active sessions and log them out everywhere.</td></tr>
+                <tr><td><code>cookie</code></td><td>The serialised session, encrypted with <code>APP_KEY</code>, in a <code>&lt;name&gt;_payload</code> cookie</td><td>Stateless servers with small sessions. Browsers cap a cookie at 4 KB: the auth id, CSRF token and a flash message fit; a cart does not. A payload over the limit is logged and dropped, keeping the previous session.</td></tr>
+                <tr><td><code>array</code></td><td>Memory, for the current request only</td><td>Tests and endpoints that must never persist anything.</td></tr>
+            </table>
+            </div>
+<pre><code class="language-bash">php console.php session:table     # confirms (or creates) the sessions migration
+php console.php migrate
+# .env
+SESSION_DRIVER=database
+SESSION_TABLE=sessions            # SESSION_CONNECTION= for a dedicated connection</code></pre>
+            <p>The database driver stores the logged-in user's id, IP and user agent next to each session and garbage-collects rows older than <code>SESSION_LIFETIME</code>. It implements PHP's <code>validateId()</code>, so strict mode keeps rejecting session IDs the server never issued. <code>SESSION_LAZY_WRITE=true</code> (default) skips the write when nothing in the session changed, which saves a file or database write on most requests; set it to <code>false</code> to keep <code>last_activity</code> exact on every request.</p>
+
             <h2>Flash data</h2>
             <p>Flash values are written for the <em>next</em> request and readable throughout it, which is what the post-redirect-get pattern needs:</p>
 <pre><code class="language-php">flash('success', 'Saved.');              // visible on the next request
@@ -48,6 +66,14 @@ cache_forget('stats');   cache_flush();
 
 $stats = cache_remember('stats', 600, fn () => Database::table('orders')->count());</code></pre>
             <p>Values are serialised into <code>storage/cache</code>, written through a temporary file so readers never see a half-written entry; anything serialisable can be stored, including models and collections. <code>console cache:clear</code> empties the directory.</p>
+
+            <h2>Response caching</h2>
+            <p>Whole GET responses can be cached per route with the <code>cache.response:ttl</code> middleware, which stores status, headers and body in the same file cache keyed by the full URL and answers later requests with <code>X-Cache: HIT</code> without running the action. It steps aside for logged-in visitors, flash messages, non-GET requests and <code>private</code>/<code>no-store</code> responses. Pair it with <code>cache.headers</code> for browser caching:</p>
+<pre><code class="language-php">get('/sitemap.xml', 'SitemapController@index', 'sitemap', ['cache.response:600']);
+get('/docs/{page}', 'DocsController@show', 'docs', ['cache.headers:public,max_age=3600,etag']);
+
+response_cache_forget(url('sitemap.xml'));   // evict one entry after a change</code></pre>
+            <p>Both middleware are documented on the <a href="security.html">Security</a> page under HTTP caching middleware.</p>
 
             <h2>Rate limiting</h2>
 <pre><code class="language-php">post('/login', 'AuthController@login', 'login.store', ['throttle:5,1']);    // 5 per minute per IP

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mail · ComfreePHP Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">C</span>ComfreePHP <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Mail</h1>
+            <p class="lead">Emails are <code>Mailable</code> classes in <code>mail/</code> rendered from Smarty templates in <code>views/mail/</code>, sent through a transport chosen in <code>config/mail.php</code>: a raw-socket SMTP client, PHP's <code>mail()</code>, the log file (the development default) or an in-memory array for tests. No external library.</p>
+
+            <h2>Configuration</h2>
+            <p><code>MAIL_MAILER</code> selects the mailer; the SMTP settings and the default sender come from the other <code>MAIL_*</code> variables in <code>.env</code>. With the default <code>log</code> mailer every message lands in <code>storage/logs/app-YYYY-MM-DD.log</code>, headers and all, so nothing leaves a development machine.</p>
+<pre><code class="language-bash">MAIL_MAILER=smtp
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_ENCRYPTION=tls        # tls = STARTTLS, ssl = implicit TLS (465), empty = plain
+MAIL_USERNAME=postmaster
+MAIL_PASSWORD=secret
+MAIL_FROM_ADDRESS=hello@example.com
+MAIL_FROM_NAME="${APP_NAME}"</code></pre>
+            <p>Check the setup end to end with <code>php console.php mail:test you@example.com</code> (add <code>--mailer=smtp</code> to try a mailer other than the default).</p>
+
+            <h2>Writing a mailable</h2>
+            <p><code>php console.php make:mail OrderShipped</code> creates <code>mail/OrderShipped.php</code> and <code>views/mail/order_shipped.tpl</code>. Configure the message in <code>build()</code> with the fluent setters; constructor arguments carry the data.</p>
+<pre><code class="language-php">class OrderShipped extends Mailable
+{
+    public function __construct(private Order $order) {}
+
+    public function build(): void
+    {
+        $this->subject('Order #' . $this->order->id . ' shipped')
+            ->view('mail/order_shipped', ['order' => $this->order])
+            ->text('Your order ' . $this->order->id . ' is on its way.')   // plain-text alternative
+            ->replyTo('support@example.com', 'Support')
+            ->attach(BASE_PATH . '/storage/invoices/' . $this->order->id . '.pdf', 'invoice.pdf')
+            ->attachData($csv, 'items.csv', 'text/csv')
+            ->priority(1);
+    }
+}</code></pre>
+            <p>Setters: <code>to</code>, <code>cc</code>, <code>bcc</code>, <code>replyTo</code> (each accepts <code>'a@b.c'</code>, <code>'a@b.c', 'Name'</code>, <code>['a@b.c', 'd@e.f']</code>, <code>['a@b.c' => 'Ann']</code> or <code>['address' => ..., 'name' => ...]</code>), <code>from</code>, <code>subject</code>, <code>view(template, data)</code>, <code>with(key, value)</code>, <code>text</code>, <code>html</code> (raw markup instead of a template), <code>attach(path, name?, mime?)</code>, <code>attachData(data, name, mime)</code>, <code>header</code>, <code>priority(1-5)</code>. <code>render()</code> returns the HTML body for previewing in a route; <code>toMessage()</code> produces the <code>MailMessage</code> value object the transports consume.</p>
+
+            <h2>Templates</h2>
+            <p>Mail templates are ordinary Smarty views with the same globals (<code>$app_name</code>, <code>{current_year}</code>, auto-escaping) plus <code>$subject</code>. <code>views/mail/layout.tpl</code> is a table-based responsive layout with <code>header</code>, <code>content</code> and <code>footer</code> blocks; extend it and fill <code>content</code>.</p>
+<pre><code class="language-smarty">{extends file='mail/layout.tpl'}
+
+{block name='content'}
+    &lt;h1 style="margin:0 0 16px;font-size:22px;"&gt;Welcome, {$name}!&lt;/h1&gt;
+    &lt;p&gt;&lt;a href="{$url}"&gt;Open your account&lt;/a&gt;&lt;/p&gt;
+{/block}</code></pre>
+            <p>Use absolute URLs in emails: <code>app_url() . '/account'</code> rather than <code>url()</code>, which is relative to the web root.</p>
+
+            <h2>Sending</h2>
+<pre><code class="language-php">Mail::to($user->email, $user->name)->send(new WelcomeMail($user->name));
+Mail::to(['a@example.com', 'b@example.com'])->cc('boss@example.com')->send(new OrderShipped($order));
+Mail::send((new OrderShipped($order))->to($customer->email));   // recipients set on the mailable
+Mail::raw('ops@example.com', 'Disk almost full', "92% used on web-1\n");
+Mail::send($mailable, 'smtp');                                  // a specific mailer
+Mail::queue(new OrderShipped($order));                          // SendMailJob on the queue, or sent now without it</code></pre>
+            <p><code>Mail::send()</code> returns the <code>MailMessage</code> that went out and fires the <code>mail.sent</code> event with the mailable and message. Delivery problems throw a <code>RuntimeException</code> with the SMTP reply in the message; nothing is swallowed.</p>
+
+            <h2>Transports</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Mailer</th><th>Class</th><th>Notes</th></tr>
+                <tr><td><code>smtp</code></td><td><code>SmtpTransport</code></td><td><code>stream_socket_client</code>, EHLO, STARTTLS via <code>stream_socket_enable_crypto</code> or implicit TLS, AUTH LOGIN / PLAIN, per-command timeouts, dot-stuffing. One connection per message.</td></tr>
+                <tr><td><code>sendmail</code></td><td><code>SendmailTransport</code></td><td>PHP <code>mail()</code>: the sendmail binary or the SMTP settings in php.ini.</td></tr>
+                <tr><td><code>log</code></td><td><code>LogTransport</code></td><td>Writes the full RFC 5322 message to the application log. Development default.</td></tr>
+                <tr><td><code>array</code></td><td><code>ArrayTransport</code></td><td>Keeps <code>MailMessage</code> objects in memory (<code>mailer()->messages()</code>). Used by <code>Mail::fake()</code>.</td></tr>
+            </table>
+            </div>
+            <p><code>MimeBuilder</code> turns a <code>MailMessage</code> into wire format: quoted-printable text and HTML parts inside <code>multipart/alternative</code>, wrapped in <code>multipart/mixed</code> with base64 parts when there are attachments, RFC 2047 encoding for non-ASCII subjects and display names, and CR/LF stripped from every header value so user input cannot inject headers. A custom transport is any class implementing <code>MailTransport</code>; register it under a mailer name with <code>mail_use('api', new ApiTransport())</code> or bind the transport name in <code>config/container.php</code>.</p>
+
+            <h2>Testing</h2>
+            <p><code>Mail::fake()</code> routes every send into memory and records the mailables. Filters receive the mailable, so assertions can inspect recipients (<code>hasTo()</code>, <code>hasCc()</code>, <code>hasBcc()</code>) and constructor data. <code>Mail::sentMessages()</code> exposes the rendered messages for checking the subject or body.</p>
+<pre><code class="language-php">test('registration sends the welcome mail', function () {
+    Mail::fake();
+
+    http_post('/register', ['name' => 'Ann', 'email' => 'ann@example.com', ...]);
+
+    Mail::assertSent(WelcomeMail::class, fn (WelcomeMail $mail) => $mail->hasTo('ann@example.com'));
+    Mail::assertNotSent(OrderShipped::class);
+    assert_contains('Welcome, Ann', Mail::sentMessages()[0]->html);
+});
+
+test('nothing is sent on validation errors', function () {
+    Mail::fake();
+    http_post('/register', []);
+    Mail::assertNothingSent();
+});</code></pre>
+            <p>The test runner does not reset the fake between tests; call <code>mail_reset()</code> (drops cached transports and restores the real facade) in <code>after_each()</code>. Set <code>config_set('mail.default', 'array')</code> in a test that wants to exercise a real transport without touching the log.</p>
+
+            <h2>Console</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Command</th><th>Description</th></tr>
+                <tr><td><code>make:mail Name</code></td><td>Creates <code>mail/Name.php</code> and <code>views/mail/name.tpl</code> extending the mail layout.</td></tr>
+                <tr><td><code>mail:test address [--mailer=name]</code></td><td>Sends a text + HTML test message through a mailer and prints the transport, host, sender and timing.</td></tr>
+            </table>
+            </div>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

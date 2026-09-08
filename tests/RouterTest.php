@@ -16,25 +16,25 @@ class RouterTestController
 test('static routes match exactly', function () {
     get('/about', fn () => 'about page', 'about');
 
-    assert_same('about page', dispatch('GET', '/about'));
+    assert_same('about page', route_dispatch('GET', '/about'));
 
-    $e = assert_throws(fn () => dispatch('GET', '/about/extra'), HttpException::class);
+    $e = assert_throws(fn () => route_dispatch('GET', '/about/extra'), HttpException::class);
     assert_same(404, $e->status);
 });
 
 test('dynamic routes pass parameters positionally, optional ones default to null', function () {
     get('/user/{id}/{tab?}', 'RouterTestController@show', 'user');
 
-    assert_same('user:5:none', dispatch('GET', '/user/5'));
-    assert_same('user:5:posts', dispatch('GET', '/user/5/posts'));
+    assert_same('user:5:none', route_dispatch('GET', '/user/5'));
+    assert_same('user:5:posts', route_dispatch('GET', '/user/5/posts'));
 });
 
 test('parameter constraints are enforced', function () {
     get('/user/{id:\d+}', fn ($id) => "id=$id");
 
-    assert_same('id=42', dispatch('GET', '/user/42'));
+    assert_same('id=42', route_dispatch('GET', '/user/42'));
 
-    $e = assert_throws(fn () => dispatch('GET', '/user/abc'), HttpException::class);
+    $e = assert_throws(fn () => route_dispatch('GET', '/user/abc'), HttpException::class);
     assert_same(404, $e->status);
 });
 
@@ -42,22 +42,22 @@ test('parameters are url-decoded and literal segments are regex-safe', function 
     get('/tag/{name}', fn ($name) => $name);
     get('/a.b/{x}', fn ($x) => "dot:$x");
 
-    assert_same('hello world', dispatch('GET', '/tag/hello%20world'));
-    assert_same('dot:1', dispatch('GET', '/a.b/1'));
-    assert_throws(fn () => dispatch('GET', '/aXb/1'), HttpException::class);
+    assert_same('hello world', route_dispatch('GET', '/tag/hello%20world'));
+    assert_same('dot:1', route_dispatch('GET', '/a.b/1'));
+    assert_throws(fn () => route_dispatch('GET', '/aXb/1'), HttpException::class);
 });
 
 test('HEAD requests fall back to GET routes', function () {
     get('/page', fn () => 'body');
 
-    assert_same('body', dispatch('HEAD', '/page'));
+    assert_same('body', route_dispatch('HEAD', '/page'));
 });
 
 test('a path that exists for other methods answers 405 with Allow', function () {
     get('/thing', fn () => 'get');
     post('/thing', fn () => 'post');
 
-    $e = assert_throws(fn () => dispatch('DELETE', '/thing'), HttpException::class);
+    $e = assert_throws(fn () => route_dispatch('DELETE', '/thing'), HttpException::class);
 
     assert_same(405, $e->status);
     assert_same('GET, POST, HEAD', $e->headers['Allow']);
@@ -76,9 +76,9 @@ test('groups apply prefix, middleware and name prefix, and nest', function () {
 
     get('/outside', fn () => 'plain', 'outside');
 
-    assert_same('[users]', dispatch('GET', '/admin/users'));
-    assert_same('[daily]', dispatch('GET', '/admin/reports/daily'));
-    assert_same('plain', dispatch('GET', '/outside'));
+    assert_same('[users]', route_dispatch('GET', '/admin/users'));
+    assert_same('[daily]', route_dispatch('GET', '/admin/reports/daily'));
+    assert_same('plain', route_dispatch('GET', '/outside'));
     assert_same('/admin/users', route_url('admin.users'));
     assert_same('/admin/reports/daily', route_url('admin.daily'));
 });
@@ -115,16 +115,16 @@ test('invokable controllers and [class, method] actions work', function () {
     get('/invoke', 'RouterTestController');
     get('/pair/{id}', ['RouterTestController', 'show']);
 
-    assert_same('invoked', dispatch('GET', '/invoke'));
-    assert_same('user:1:none', dispatch('GET', '/pair/1'));
+    assert_same('invoked', route_dispatch('GET', '/invoke'));
+    assert_same('user:1:none', route_dispatch('GET', '/pair/1'));
 });
 
 test('missing controllers and methods fail loudly', function () {
     get('/a', 'NoSuchController@index');
     get('/b', 'RouterTestController@nope');
 
-    assert_throws(fn () => dispatch('GET', '/a'), RuntimeException::class, 'not found');
-    assert_throws(fn () => dispatch('GET', '/b'), RuntimeException::class, 'not found');
+    assert_throws(fn () => route_dispatch('GET', '/a'), RuntimeException::class, 'not found');
+    assert_throws(fn () => route_dispatch('GET', '/b'), RuntimeException::class, 'not found');
 });
 
 test('route_is matches the current route name, with wildcards', function () {
@@ -132,7 +132,7 @@ test('route_is matches the current route name, with wildcards', function () {
 
     assert_false(route_is('admin.x'), 'nothing dispatched yet');
 
-    dispatch('GET', '/admin/x');
+    route_dispatch('GET', '/admin/x');
 
     assert_same('admin.x', current_route_name());
     assert_true(route_is('admin.x'));
@@ -149,6 +149,6 @@ test('route definitions survive a cache round-trip', function () {
     routes_reset();
     routes_load($payload);
 
-    assert_same('user:3:none', dispatch('GET', '/user/3'));
+    assert_same('user:3:none', route_dispatch('GET', '/user/3'));
     assert_same('/user/3', route_url('user', ['id' => 3]));
 });
