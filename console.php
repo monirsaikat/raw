@@ -152,6 +152,7 @@ function run_seeders(?string $only = null): int
 command('help', 'List the available commands', function () {
     global $commands;
 
+    line('ComfreePHP console');
     line('Usage: php console.php <command> [arguments] [--option=value]');
     line();
 

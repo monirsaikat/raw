@@ -2,7 +2,7 @@
 
 return [
     // Cookie name. Use a distinct name per app on a shared host.
-    'name' => env('SESSION_NAME', 'app_session'),
+    'name' => env('SESSION_NAME', 'comfreephp_session'),
 
     // Idle timeout in minutes; 0 disables it. The cookie itself lasts until
     // the browser closes — persistent logins use "remember me" instead.

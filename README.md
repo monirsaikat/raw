@@ -1,6 +1,6 @@
-# YourApp framework
+# ComfreePHP
 
-A small, dependency-free PHP 8.3 framework: procedural helpers where that reads
+ComfreePHP is a small, dependency-free PHP 8.3 framework: procedural helpers where that reads
 best, classes where state matters. Smarty 5 templates (vendored, no Composer),
 PDO on MySQL/MariaDB or SQLite, Bootstrap self-hosted. Everything runs on XAMPP
 or the built-in PHP server.

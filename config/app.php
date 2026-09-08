@@ -2,7 +2,7 @@
 
 return [
     // Shown in the layout, error pages and logs.
-    'name' => env('APP_NAME', 'YourApp'),
+    'name' => env('APP_NAME', 'ComfreePHP'),
 
     // 'local' | 'production' — only used for log lines and your own checks.
     'env' => env('APP_ENV', 'production'),

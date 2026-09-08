@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Configuration · YourApp Framework Docs</title>
+<title>Configuration · ComfreePHP Docs</title>
 <link rel="stylesheet" href="assets/docs.css">
 </head>
 <body>
 <header class="topbar">
     <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
-    <a class="brand" href="index.html"><span class="brand-mark">Y</span>YourApp Framework <small>docs</small></a>
+    <a class="brand" href="index.html"><span class="brand-mark">C</span>ComfreePHP <small>docs</small></a>
     <span class="spacer"></span>
     <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
     <button id="theme-toggle" type="button">Dark</button>
@@ -23,7 +23,7 @@
 
             <h2>The .env file</h2>
             <p><code>.env</code> is loaded by <code>load_env()</code> at bootstrap. Real environment variables win over the file, so a server can override any value without editing it. The file is never committed; <code>.env.example</code> documents every key.</p>
-<pre><code class="language-ini">APP_NAME=YourApp
+<pre><code class="language-ini">APP_NAME=ComfreePHP
 APP_ENV=local
 APP_DEBUG=true
 APP_URL=
@@ -62,7 +62,7 @@ DB_CHARSET=utf8mb4</code></pre>
             </div>
 
             <h2>Reading configuration</h2>
-<pre><code class="language-php">config('app.name');                          // "YourApp"
+<pre><code class="language-php">config('app.name');                          // "ComfreePHP"
 config('database.connections.mysql.host');   // "127.0.0.1"
 config('mail.from', 'noreply@example.com');  // default when the key or file is missing
 config_set('app.name', 'Renamed');           // for this request only
