@@ -93,9 +93,10 @@
 
             <h2>Authentication and authorization</h2>
             <div class="table-wrap"><table>
-                <tr><td><code>auth_user()</code>, <code>auth_id()</code>, <code>auth_check()</code>, <code>auth_guest()</code></td><td>Current user</td></tr>
+                <tr><td><code>auth_user($guard)</code>, <code>auth_id($guard)</code>, <code>auth_check($guard)</code>, <code>auth_guest($guard)</code></td><td>Current user of the default guard, or of a named one</td></tr>
+                <tr><td><code>guard($name)</code>, <code>auth_guard()</code>, <code>auth_use_guard($name)</code>, <code>auth_guards()</code>, <code>auth_guard_config($guard, $key)</code></td><td>Guard object; the request's default guard; every guard name; a guard's settings</td></tr>
                 <tr><td><code>auth_hash($plain)</code>, <code>auth_verify($plain, $hash)</code></td><td>Password hashing; logins rehash automatically when the algorithm changes</td></tr>
-                <tr><td><code>auth_attempt($username, $password, $remember)</code>, <code>auth_login($user, $remember)</code>, <code>auth_logout()</code>, <code>auth_intended($default)</code></td><td>Login flow</td></tr>
+                <tr><td><code>auth_attempt($username, $password, $remember, $guard)</code>, <code>auth_login($user, $remember, $guard)</code>, <code>auth_logout($guard)</code>, <code>auth_logout_all()</code>, <code>auth_intended($default, $guard)</code></td><td>Login flow</td></tr>
                 <tr><td><code>can()</code>, <code>cannot()</code>, <code>can_any()</code>, <code>authorize()</code></td><td>Checks for the current user</td></tr>
                 <tr><td><code>gate()</code>, <code>gate_define()</code>, <code>gate_policy()</code>, <code>gate_before()</code>, <code>gate_after()</code></td><td>Gate configuration</td></tr>
             </table></div>

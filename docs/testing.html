@@ -57,6 +57,7 @@ http_request('GET', '/x', [], ['Referer' => '/y'], ['REMOTE_ADDR' => '10.0.0.1']
 
 http_use_app_routes();          // load routes/web.php (tests start with no routes)
 acting_as($user);               // subsequent requests are authenticated; acting_as(null) logs out
+acting_as($admin, 'admin');     // on another guard, alongside the first
 http_follow($response);         // follow local redirects with GET</code></pre>
             <p>To test a CSRF failure pass <code>['_token' => 'wrong']</code>. Requests carry the previous request's URL as <code>Referer</code>, so <code>back()</code> behaves naturally.</p>
 
@@ -72,7 +73,7 @@ http_follow($response);         // follow local redirects with GET</code></pre>
                 <tr><td><code>assertHeader('Content-Type', 'application/json; charset=utf-8')</code>, <code>assertHeaderMissing()</code></td><td>Headers</td></tr>
                 <tr><td><code>assertSessionHas('key', $value)</code>, <code>assertSessionMissing()</code></td><td>Session after the request</td></tr>
                 <tr><td><code>assertSessionHasErrors(['email'])</code>, <code>assertSessionHasErrors(['email' => 'The email must be a valid email address.'])</code>, <code>assertSessionHasNoErrors()</code>, <code>assertValid()</code>, <code>assertInvalid()</code></td><td>Validation errors flashed for the next request</td></tr>
-                <tr><td><code>assertAuthenticated($user)</code>, <code>assertGuest()</code></td><td>Login state</td></tr>
+                <tr><td><code>assertAuthenticated($user, $guard)</code>, <code>assertGuest($guard)</code></td><td>Login state, per guard</td></tr>
             </table>
             </div>
             <p>Also available: <code>status()</code>, <code>body()</code>, <code>headers()</code>, <code>header($name)</code>, <code>json('path')</code>, <code>dump()</code>, and <code>->exception</code>.</p>

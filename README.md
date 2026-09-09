@@ -408,6 +408,21 @@ intended URL, 401 for JSON) and `guest`.
 Remember-me stores an HMAC of the cookie token in `users.remember_token`.
 Settings: `config/auth.php`.
 
+Guards let several models log in independently (a customer as `User`, staff
+as `Admin`), each with its own session key, intended URL and cookie:
+
+```php
+// config/auth.php: 'guards' => ['web' => ['model' => 'User'], 'admin' => ['model' => 'Admin', 'login_route' => 'admin.login']]
+auth_attempt($email, $password, guard: 'admin');   auth_user('admin');   auth_logout('admin');
+guard('admin')->attempt($email, $password);        guard('admin')->user();
+group(['prefix' => '/admin', 'middleware' => ['guard:admin']], function () {   // guard:admin makes it the request default
+    get('/login', 'AdminLoginController@show', 'admin.login', ['guest:admin']);
+    get('/', 'AdminController@index', 'admin.dashboard', ['auth:admin']);      // auth_user(), can() and {$auth_user} are the admin
+});
+```
+
+Tests: `acting_as($admin, 'admin')`, `->assertAuthenticated($admin, 'admin')`.
+
 ## Sessions, flash, cache, throttling
 
 Sessions start lazily on first use (`session_get/set/has/pull/forget`), rotate

@@ -227,20 +227,22 @@ function http_use_app_routes(): void
     require BASE_PATH . '/routes/web.php';
 }
 
-// Subsequent requests run as this user (null → guest again).
-function acting_as(?Model $user): void
+// Subsequent requests run as this user (null → guest again). Name a guard
+// to log in on it: acting_as($admin, 'admin').
+function acting_as(?Model $user, ?string $guard = null): void
 {
-    $GLOBALS['__test_acting_as'] = $user;
+    $guard ??= auth_guard();
+    $GLOBALS['__test_acting_as'][$guard] = $user;
 
     if ($user === null) {
-        session_forget(auth_session_key());
-        auth_set_user(null);
+        session_forget(auth_session_key($guard));
+        auth_set_user(null, $guard);
 
         return;
     }
 
-    session_set(auth_session_key(), $user->getKey());
-    auth_set_user($user);
+    session_set(auth_session_key($guard), $user->getKey());
+    auth_set_user($user, $guard);
 }
 
 // Performs an in-process request against the registered routes: globals are
@@ -292,9 +294,11 @@ function http_request(string $method, string $uri, array $data = [], array $head
     // Age flash data and drop per-request caches, but keep the session.
     test_next_request();
 
-    if (array_key_exists('__test_acting_as', $GLOBALS) && $GLOBALS['__test_acting_as'] instanceof Model) {
-        session_set(auth_session_key(), $GLOBALS['__test_acting_as']->getKey());
-        auth_set_user($GLOBALS['__test_acting_as']);
+    foreach ((array) ($GLOBALS['__test_acting_as'] ?? []) as $guard => $actingAs) {
+        if ($actingAs instanceof Model) {
+            session_set(auth_session_key($guard), $actingAs->getKey());
+            auth_set_user($actingAs, $guard);
+        }
     }
 
     $unsafe = !in_array($method, ['GET', 'HEAD', 'OPTIONS'], true);

@@ -149,7 +149,13 @@ function response_cache_skip(): bool
         return false;
     }
 
-    return session_get(auth_session_key()) !== null || flash_all() !== [];
+    foreach (auth_guards() as $guard) {
+        if (session_get(auth_session_key($guard)) !== null) {
+            return true;
+        }
+    }
+
+    return flash_all() !== [];
 }
 
 middleware('cache.response', function (callable $next, $ttl = 60) {

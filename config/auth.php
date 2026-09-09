@@ -1,7 +1,29 @@
 <?php
 
 return [
-    // Model class that represents an authenticated user.
+    // Guard used when none is named: auth_user(), ['auth'], guard().
+    'default' => env('AUTH_GUARD', 'web'),
+
+    // One entry per kind of login. A guard may set model, username,
+    // session_key, login_route, login_path, home_route and remember; missing
+    // keys fall back to the top-level values below. Non-default guards get
+    // their own session key ('auth_id_admin') and cookie ('remember_me_admin')
+    // automatically, so a customer and a staff member can be logged in at
+    // the same time. Use them with auth_user('admin'), ['auth:admin'],
+    // ['guest:admin'], ['guard:admin'] and guard('admin')->attempt(...).
+    'guards' => [
+        'web' => [
+            'model' => 'User',
+        ],
+        // 'admin' => [
+        //     'model' => 'Admin',
+        //     'login_route' => 'admin.login',
+        //     'login_path' => '/admin/login',
+        //     'home_route' => 'admin.dashboard',
+        // ],
+    ],
+
+    // Model class that represents an authenticated user (default for guards).
     'model' => 'User',
 
     // Column matched against the first argument of auth_attempt().

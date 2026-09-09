@@ -380,9 +380,9 @@ class TestResponse
 
     // -------------------------------------------------------------- auth --
 
-    public function assertAuthenticated(?Model $as = null): static
+    public function assertAuthenticated(?Model $as = null, ?string $guard = null): static
     {
-        $id = session_get(auth_session_key());
+        $id = session_get(auth_session_key($guard));
 
         if ($id === null) {
             $this->fail('Expected an authenticated user, found a guest');
@@ -395,9 +395,9 @@ class TestResponse
         return $this;
     }
 
-    public function assertGuest(): static
+    public function assertGuest(?string $guard = null): static
     {
-        if (session_get(auth_session_key()) !== null) {
+        if (session_get(auth_session_key($guard)) !== null) {
             $this->fail('Expected a guest, found an authenticated user');
         }
 

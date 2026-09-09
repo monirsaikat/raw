@@ -18,6 +18,13 @@ All notable changes to ComfreePHP are documented here. The format follows
   `make:lang`, `lang:missing` and `lang:list` commands. `docs/localization.html`.
 - `auth.login_path`: the `auth` middleware redirects there when the app has
   no route named `auth.login_route`.
+- Multiple auth guards: `config/auth.php` gains `default` and `guards`; every
+  `auth_*()` helper takes an optional trailing `$guard`, `guard('admin')`
+  wraps them in an object, `auth_use_guard()` / the `guard:name` middleware
+  set the request default, `auth:name` and `guest:name` middleware, per-guard
+  session keys, intended URLs and remember-me cookies, `auth_logout_all()`,
+  `acting_as($user, $guard)` and `assertAuthenticated($user, $guard)` /
+  `assertGuest($guard)` in tests.
 
 ### Changed
 
