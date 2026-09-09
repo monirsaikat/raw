@@ -155,12 +155,12 @@ test('send_response() appends the toolbar to a rendered page when debugging', fu
     }
 
     http_use_app_routes();
-    http_get('/about');
+    http_get('/');
 
     ob_start();
-    send_response(view('about'));
+    send_response(view('home', ['php_version' => PHP_VERSION, 'framework_version' => '0', 'locales' => ['en']]));
     $output = (string) ob_get_clean();
 
     assert_contains('id="cf-toolbar"', $output);
-    assert_contains('(about)', $output);
+    assert_contains('(home)', $output);
 });

@@ -57,6 +57,7 @@ View::share('menu', $menu);                            // available to every ren
                 <tr><th>Variable</th><th>Value</th></tr>
                 <tr><td><code>$app_name</code></td><td><code>config('app.name')</code></td></tr>
                 <tr><td><code>$auth_user</code></td><td>The logged-in user model, or null</td></tr>
+                <tr><td><code>$app_locale</code>, <code>$app_env</code></td><td>Current locale (<a href="localization.html">Localization</a>); <code>config('app.env')</code></td></tr>
                 <tr><td><code>$errors</code></td><td>Validation errors flashed by the previous request: <code>$errors.email.0</code></td></tr>
                 <tr><td><code>$old</code></td><td>Old input flashed by the previous request: <code>$old.email</code></td></tr>
                 <tr><td><code>$flash</code></td><td>The whole flash bag: <code>$flash.success</code>, <code>$flash.error</code>…</td></tr>
@@ -90,6 +91,7 @@ View::share('menu', $menu);                            // available to every ren
                 <tr><td><code>{csp_nonce}</code></td><td>The per-request nonce that the Content-Security-Policy allows for inline scripts</td></tr>
                 <tr><td><code>{if 'home'|route_is}</code></td><td>True when the current route matches (wildcards allowed: <code>'admin.*'</code>)</td></tr>
                 <tr><td><code>{if 'update'|can:$post}</code>, <code>{if 'delete'|cannot:$post}</code></td><td>Authorization checks for the logged-in user</td></tr>
+                <tr><td><code>{t key='messages.welcome' app=$app_name}</code>, <code>{'auth.failed'|__}</code>, <code>{'messages.items'|trans_choice:$n}</code></td><td>Translated strings (<a href="localization.html">Localization</a>)</td></tr>
             </table>
             </div>
             <p>Register more in <code>config/view.php</code>: a <code>functions</code> entry maps a tag name to a PHP function receiving the attribute array; a <code>modifiers</code> entry maps a modifier to a function receiving the value and any arguments.</p>

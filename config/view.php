@@ -1,7 +1,7 @@
 <?php
 
 return [
-    // view('auth/login') → views/auth/login.tpl
+    // view('posts/show') → views/posts/show.tpl
     'paths' => BASE_PATH . '/views',
 
     // Compiled templates (safe to delete; `php console.php view:clear`).
@@ -26,13 +26,17 @@ return [
         'current_year' => 'current_year',
         'perf_stats' => 'perf_stats',
         'csp_nonce' => 'csp_nonce',
+        't' => 'lang_tag',
     ],
 
     // PHP functions exposed as Smarty modifiers: {if 'home'|route_is},
-    // {if 'update'|can:$post}
+    // {if 'update'|can:$post}, {'auth.failed'|__}, {'messages.items'|trans_choice:$n}
     'modifiers' => [
         'route_is' => 'route_is',
         'can' => 'can',
         'cannot' => 'cannot',
+        '__' => '__',
+        'trans' => 'trans',
+        'trans_choice' => 'trans_choice',
     ],
 ];

@@ -20,6 +20,14 @@ return [
 
     'timezone' => env('APP_TIMEZONE', 'UTC'),
 
+    // Default locale for __() and trans_choice(); strings live in lang/<locale>/.
+    // The 'locale' middleware switches per request (?lang=, session,
+    // Accept-Language) among the locales that exist in lang/.
+    'locale' => env('APP_LOCALE', 'en'),
+
+    // Used when a key is missing from the current locale.
+    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
+
     // Secret for signing (remember-me tokens). Generate with `php console.php key:generate`.
     'key' => env('APP_KEY', ''),
 

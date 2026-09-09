@@ -80,7 +80,8 @@ if ($errors !== []) {
     'name.required' => 'Please tell us your name.',
     'max' => ':field is limited to :max characters.',
 ]);</code></pre>
-            <p>Placeholders: <code>:field</code>, <code>:param</code> (first parameter), <code>:params</code>, <code>:min</code>, <code>:max</code>, <code>:other</code>, <code>:value</code>.</p>
+            <p>Placeholders: <code>:field</code> (alias <code>:attribute</code>), <code>:param</code> (first parameter), <code>:params</code>, <code>:min</code>, <code>:max</code>, <code>:other</code>, <code>:value</code>.</p>
+            <p>App-wide messages, per-field overrides and field display names live in <code>lang/&lt;locale&gt;/validation.php</code> and follow the current locale; see <a href="localization.html">Localization</a>.</p>
 
             <h2>Custom rules</h2>
 <pre><code class="language-php">// e.g. in middleware/ or a bootstrap file of your own
@@ -105,7 +106,7 @@ validator_extend('slug_available', function ($value, array $params, array $data,
     $data = validated(input(), ['email' => 'required|email', 'password' => 'required']);
 
     if (!auth_attempt($data['email'], $data['password'], has_input('remember'))) {
-        return back_with_errors(['email' => ['Those credentials do not match our records.']]);
+        return back_with_errors(['email' => [__('auth.failed')]]);
     }
 
     return auth_intended(route_url('account'));

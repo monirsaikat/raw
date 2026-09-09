@@ -8,6 +8,30 @@ All notable changes to ComfreePHP are documented here. The format follows
 
 ### Added
 
+- Localization module: `__()`, `trans()`, `trans_choice()` with plural
+  ranges, `lang/<locale>/<group>.php` and `lang/<locale>.json` files,
+  fallback locale, `app_locale()` / `set_locale()`, the global `locale`
+  middleware (`?lang=`, session, `Accept-Language`), Smarty `{t}` tag and
+  `__` / `trans_choice` modifiers, `$app_locale` and `$app_env` template
+  globals, validation messages and field names from
+  `lang/<locale>/validation.php`, translated paginator labels, and the
+  `make:lang`, `lang:missing` and `lang:list` commands. `docs/localization.html`.
+- `auth.login_path`: the `auth` middleware redirects there when the app has
+  no route named `auth.login_route`.
+
+### Changed
+
+- The skeleton app is now a single starter route (`/` → `HomeController`,
+  `views/home.tpl`) with a next-steps page. The demo about/contact/user/auth
+  pages, the `Message` model and its migration were removed; the two users
+  migrations were merged into one that includes `remember_token` and
+  `timestamps()`.
+
+### Removed
+
+- The `benchmarks/` folder (Laravel/Symfony comparison sources); the numbers
+  and method stay in `docs/comparison.html`.
+
 - Debug toolbar on HTML pages when `APP_DEBUG` is on: time, memory, matched
   route, request and status, query log with slow-query highlighting, session
   keys (secrets hidden), user id, included files and the log lines of the

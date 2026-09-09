@@ -10,8 +10,10 @@ return [
     // Session key that holds the logged-in user's id.
     'session_key' => 'auth_id',
 
-    // Named routes used by the 'auth' and 'guest' middleware.
+    // Named routes used by the 'auth' and 'guest' middleware. When no route
+    // called login_route exists, guests are sent to login_path instead.
     'login_route' => 'login',
+    'login_path' => '/login',
     'home_route' => 'home',
 
     // Model class => policy class. A "<Model>Policy" class in policies/ is

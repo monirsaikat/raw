@@ -2,9 +2,9 @@
 
 use Smarty\Smarty;
 
-// Smarty wrapper. Templates live in views/ (view('auth/login') renders
-// views/auth/login.tpl) and every render receives a few globals: app_name,
-// auth_user, errors, old, flash and current_route. Output is HTML-escaped by
+// Smarty wrapper. Templates live in views/ (view('posts/show') renders
+// views/posts/show.tpl) and every render receives a few globals: app_name,
+// auth_user, errors, old, flash, current_route, app_locale. Output is HTML-escaped by
 // default; use {$html|raw} for trusted markup. Settings: config/view.php.
 
 class View
@@ -68,6 +68,8 @@ class View
             'flash' => flash_all(),
             'current_route' => current_route_name(),
             'app_debug' => APP_DEBUG,
+            'app_env' => (string) config('app.env', 'production'),
+            'app_locale' => function_exists('app_locale') ? app_locale() : (string) config('app.locale', 'en'),
         ];
     }
 

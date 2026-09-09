@@ -69,7 +69,7 @@ test('build() runs once and a view renders through Smarty with the mail layout',
     assert_same('Welcome to ' . app_name(), $mail->getSubject());
     assert_same('mail/welcome', $mail->getView());
     assert_contains('Welcome, Ann &lt;b&gt;!', $html, 'template output is escaped');
-    assert_contains('http://localhost/app/account', $html);
+    assert_contains('http://localhost/app', $html);
     assert_contains('<title>Welcome to ' . app_name() . '</title>', $html, 'subject reaches the layout');
     assert_contains('&copy; ' . date('Y'), $html);
 

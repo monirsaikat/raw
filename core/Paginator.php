@@ -206,7 +206,7 @@ class Paginator implements ArrayAccess, IteratorAggregate, Countable, JsonSerial
 
         $html .= $this->onFirstPage()
             ? '<li class="page-item disabled"><span class="page-link" aria-hidden="true">&laquo;</span></li>'
-            : '<li class="page-item"><a class="page-link" href="' . $e($this->previousPageUrl()) . '" rel="prev" aria-label="Previous">&laquo;</a></li>';
+            : '<li class="page-item"><a class="page-link" href="' . $e($this->previousPageUrl()) . '" rel="prev" aria-label="' . $e(__('pagination.previous')) . '">&laquo;</a></li>';
 
         foreach ($this->elements($onEachSide) as $page) {
             if ($page === null) {
@@ -219,7 +219,7 @@ class Paginator implements ArrayAccess, IteratorAggregate, Countable, JsonSerial
         }
 
         $html .= $this->hasMorePages()
-            ? '<li class="page-item"><a class="page-link" href="' . $e($this->nextPageUrl()) . '" rel="next" aria-label="Next">&raquo;</a></li>'
+            ? '<li class="page-item"><a class="page-link" href="' . $e($this->nextPageUrl()) . '" rel="next" aria-label="' . $e(__('pagination.next')) . '">&raquo;</a></li>'
             : '<li class="page-item disabled"><span class="page-link" aria-hidden="true">&raquo;</span></li>';
 
         return $html . '</ul></nav>';

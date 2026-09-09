@@ -38,7 +38,7 @@
                 <tr><td><strong>JSON</strong>: <code>{"pong": true, "time": "…"}</code></td><td><code>/api/ping</code> (also reports the current user, which is <code>null</code>)</td><td><code>/bench/json</code>, registered outside every middleware group</td><td><code>/bench/json</code></td><td><code>json.php</code></td></tr>
             </table>
             </div>
-            <p>All four run in production mode: <code>APP_DEBUG=false</code>, Laravel after <code>artisan optimize</code> (config, routes, views and events cached, file sessions), Symfony with <code>APP_ENV=prod</code>, an optimised authoritative class map and a warmed cache, ComfreePHP with its default settings and <em>without</em> a route cache. Nothing touches a database. The full source of the other frameworks' routes and templates is in the <code>benchmarks/</code> folder of the repository.</p>
+            <p>All four run in production mode: <code>APP_DEBUG=false</code>, Laravel after <code>artisan optimize</code> (config, routes, views and events cached, file sessions), Symfony with <code>APP_ENV=prod</code>, an optimised authoritative class map and a warmed cache, ComfreePHP with its default settings and <em>without</em> a route cache. Nothing touches a database. The other frameworks' routes and templates were kept outside the framework checkout so a new project starts clean.</p>
 
             <h2>Results</h2>
             <p>1000 requests with 10 concurrent clients, three runs per target with the targets alternated between runs, median reported. Latency percentiles are per request as seen by the client. "Relative" is throughput as a share of the fastest target.</p>
@@ -135,8 +135,8 @@
             </div>
 
             <h2>Reproduce it</h2>
-            <p>The <code>benchmarks/</code> folder holds the routes, controllers and templates for Laravel and Symfony, the plain-PHP baseline, and a setup script that installs both frameworks with Composer, switches them to production mode and warms their caches:</p>
-<pre><code class="language-bash">bash benchmarks/setup.sh /var/www/bench        # or C:/xampp/htdocs/bench
+            <p>Reproduce the table with <code>bench:compare</code> against your own installs of the other frameworks: each needs one route that renders a small layout page and one that returns JSON, both in production mode with their caches warmed:</p>
+<pre><code class="language-bash"># after installing Laravel and Symfony into /var/www/bench (or C:/xampp/htdocs/bench) and adding the two routes
 
 php console.php bench:compare \
     comfree=http://localhost/app/ \

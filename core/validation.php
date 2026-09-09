@@ -51,22 +51,45 @@ function validation_message(string $field, string $rule, array $params, array $c
 {
     global $validatorMessages;
 
+    // Precedence: messages passed to validate(), lang/<locale>/validation.php
+    // (custom.<field>.<rule>, then <rule>), the rule's built-in message.
     $template = $custom[$field . '.' . $rule]
         ?? $custom[$rule]
+        ?? validation_lang_line('custom.' . $field . '.' . $rule)
+        ?? validation_lang_line($rule)
         ?? $validatorMessages[$rule]
         ?? 'The :field field is invalid.';
 
-    $label = str_replace(['_', '-'], ' ', $field);
+    $label = validation_lang_line('attributes.' . $field) ?? str_replace(['_', '-'], ' ', $field);
+    $otherLabel = validation_lang_line('attributes.' . ($params[0] ?? '')) ?? str_replace(['_', '-'], ' ', $params[0] ?? '');
 
     return strtr($template, [
+        ':attribute' => $label,
         ':field' => $label,
         ':param' => $params[0] ?? '',
         ':params' => implode(', ', $params),
         ':min' => $params[0] ?? '',
         ':max' => $params === [] ? '' : end($params),
-        ':other' => str_replace(['_', '-'], ' ', $params[0] ?? ''),
+        ':other' => $otherLabel,
         ':value' => $params[1] ?? '',
     ]);
+}
+
+// A string from lang/<locale>/validation.php, null when the lang module is
+// not loaded or the key is missing (arrays such as `custom` are skipped).
+function validation_lang_line(string $key): ?string
+{
+    if (!function_exists('lang_line')) {
+        return null;
+    }
+
+    $line = lang_line('validation.' . $key, app_locale());
+
+    if ($line === null && app_locale() !== fallback_locale()) {
+        $line = lang_line('validation.' . $key, fallback_locale());
+    }
+
+    return is_string($line) ? $line : null;
 }
 
 function validate(array $data, array $rules, array $messages = []): array

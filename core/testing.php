@@ -439,6 +439,10 @@ function test_reset_state(): void
     auth_reset();
     global_middleware(['csrf']);
 
+    if (function_exists('lang_reset')) {
+        lang_reset();
+    }
+
     app()->flush();
     container_boot();
     gate_boot();

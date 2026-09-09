@@ -824,17 +824,26 @@ command('bench', 'Time the framework core in-process [--iterations=2000] [--json
     http_use_app_routes();
     global_middleware(['csrf']);
 
+    get('/bench/ping', fn () => ['pong' => true, 'user' => auth_user()?->toArray()], 'bench.ping');
+    post('/bench/form', function () {
+        validated(input(), ['name' => 'required|max:100', 'email' => 'required|email']);
+
+        return back();
+    }, 'bench.form');
+
     $measure('Full request: GET / (layout, session, CSRF)', fn () => http_get('/'), intdiv($n, 10));
-    $measure('Full request: GET /api/ping (JSON)', fn () => http_json('GET', '/api/ping'), intdiv($n, 10));
-    $measure('Full request: POST /contact (validation → redirect)', fn () => http_post('/contact', ['name' => '']), intdiv($n, 10));
+    $measure('Full request: GET /bench/ping (JSON)', fn () => http_json('GET', '/bench/ping'), intdiv($n, 10));
+    $measure('Full request: POST /bench/form (validation → redirect)', fn () => http_post('/bench/form', ['name' => '']), intdiv($n, 10));
 
     try {
         use_test_database();
 
-        $measure('SQLite in memory: insert', fn () => Database::table('messages')->insert(['name' => 'Ann', 'email' => 'a@b.co', 'message' => 'Hi']), intdiv($n, 2));
-        $measure('SQLite in memory: find() by id', fn () => Database::table('messages')->find(1), $n);
-        $measure('SQLite in memory: Model::find() + toArray()', fn () => Message::find(1)->toArray(), $n);
-        $measure('SQLite in memory: 50-row get() hydrated', fn () => Message::limit(50)->get(), intdiv($n, 10));
+        $password = User::hashPassword('secret');
+        $i = 0;
+        $measure('SQLite in memory: insert', fn () => Database::table('users')->insert(['name' => 'Ann', 'email' => 'a' . (++$i) . '@b.co', 'password' => $password]), intdiv($n, 2));
+        $measure('SQLite in memory: find() by id', fn () => Database::table('users')->find(1), $n);
+        $measure('SQLite in memory: Model::find() + toArray()', fn () => User::find(1)->toArray(), $n);
+        $measure('SQLite in memory: 50-row get() hydrated', fn () => User::limit(50)->get(), intdiv($n, 10));
     } catch (TestSkipped $e) {
         $results[] = $skipped('SQLite: skipped (' . $e->getMessage() . ')');
     }

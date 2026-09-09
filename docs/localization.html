@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Localization · ComfreePHP Docs</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+<header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Toggle navigation">Menu</button>
+    <a class="brand" href="index.html"><span class="brand-mark">C</span>ComfreePHP <small>docs</small></a>
+    <span class="spacer"></span>
+    <input class="filter" id="filter" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+    <button id="theme-toggle" type="button">Dark</button>
+</header>
+<div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Documentation"></nav>
+    <main class="content">
+        <article>
+            <h1>Localization</h1>
+            <p class="lead">Strings live in <code>lang/</code>, one directory per locale. <code>__()</code> reads them, <code>trans_choice()</code> pluralises, and the <code>locale</code> middleware picks the language per request. Untranslated keys fall back to the fallback locale, then to the key itself, so an app can start in one language and add others later.</p>
+
+            <h2>Files</h2>
+<pre><code class="language-text">lang/
+  en/
+    auth.php          'failed' => 'Those credentials do not match our records.'
+    messages.php      'welcome' => 'Welcome to :app'
+    pagination.php    'previous' => 'Previous', 'next' => 'Next'
+    validation.php    'required' => 'The :field field is required.', 'custom' => [...], 'attributes' => [...]
+  bn/
+    ...               same files, translated values
+  bn.json             {"Save changes": "পরিবর্তন সংরক্ষণ করুন"}</code></pre>
+            <p>PHP files return arrays and are addressed by <em>group.key</em> (<code>messages.welcome</code>); nested arrays use more dots (<code>validation.custom.email.required</code>). A <code>&lt;locale&gt;.json</code> file holds flat sentence keys for apps that prefer <code>__('Save changes')</code> to invented identifiers. Both may be used together.</p>
+
+            <h2>Reading strings</h2>
+<pre><code class="language-php">__('messages.welcome', ['app' => app_name()]);      // "Welcome to Shop"
+__('Hello :name', ['name' => 'ann']);               // JSON key, or the key itself when missing
+__('Hello :Name / :NAME', ['name' => 'ann']);       // "Hello Ann / ANN" — placeholder case is applied
+__('auth.failed', [], 'bn');                        // explicit locale
+trans('auth.failed');                               // alias of __()
+lang_has('messages.welcome');                       // bool
+
+trans_choice('messages.items', 0);                  // '{0} No items|{1} One item|[2,*] :count items' → "No items"
+trans_choice('messages.items', 7);                  // "7 items"
+trans_choice('shop.apples', $count);                // 'apple|apples' → singular for 1, plural otherwise
+trans_choice('messages.items', $collection);        // countables use their count</code></pre>
+            <p>Plural lines are pipe-separated. Two plain segments mean singular and plural. Explicit forms use <code>{n}</code> for one number and <code>[a,b]</code> for a range (<code>*</code> is open-ended). <code>:count</code> is filled in automatically.</p>
+
+            <h2>Choosing the locale</h2>
+<pre><code class="language-php">app_locale();                       // current locale, "en" by default (config('app.locale'))
+set_locale('bn');                   // for the rest of the request
+set_locale('bn', remember: true);   // and store it in the session
+locale_is('bn', 'hi');              // bool
+lang_available();                   // ['bn', 'en'] — what exists in lang/
+fallback_locale();                  // config('app.fallback_locale')</code></pre>
+            <p>The <code>locale</code> middleware runs on every route (it is in the global middleware list). It picks, in order: a <code>?lang=</code> query parameter, which is also stored in the session; the locale stored in the session; the best match from the <code>Accept-Language</code> header (<code>fr-CH</code> matches <code>fr</code>); and finally <code>config('app.locale')</code>. Only locales present in <code>lang/</code> are ever chosen, so the parameter is safe to expose as a link:</p>
+<pre><code class="language-smarty">{foreach lang_available() as $locale}
+    &lt;a href="?lang={$locale}"{if $locale == $app_locale} class="active"{/if}&gt;{$locale}&lt;/a&gt;
+{/foreach}</code></pre>
+            <p>Use a different parameter name with <code>global_middleware(['csrf', 'locale:language'])</code>, or drop <code>locale</code> from the list and call <code>set_locale()</code> yourself, for example from the logged-in user's profile in your own middleware.</p>
+
+            <h2>Templates</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Tag</th><th>Output</th></tr>
+                <tr><td><code>{t key='messages.welcome' app=$app_name}</code></td><td><code>__()</code>; every other attribute is a placeholder. Output is escaped; add <code>raw=true</code> for lines that contain markup</td></tr>
+                <tr><td><code>{t key='messages.items' count=$n}</code></td><td><code>trans_choice()</code></td></tr>
+                <tr><td><code>{'auth.failed'|__}</code>, <code>{'Hello :name'|__:['name' => $name]}</code></td><td>Modifier form, escaped like any <code>{$var}</code></td></tr>
+                <tr><td><code>{'messages.items'|trans_choice:$n}</code></td><td>Modifier form of <code>trans_choice()</code></td></tr>
+                <tr><td><code>{$app_locale}</code></td><td>Global: the current locale, handy for <code>&lt;html lang="{$app_locale}"&gt;</code></td></tr>
+            </table>
+            </div>
+
+            <h2>Validation messages</h2>
+            <p><code>lang/&lt;locale&gt;/validation.php</code> overrides the built-in rule messages. Precedence, highest first: messages passed to <code>validated()</code> / <code>validate()</code>, <code>custom.&lt;field&gt;.&lt;rule&gt;</code> in the lang file, <code>&lt;rule&gt;</code> in the lang file, the same keys in the fallback locale, the rule's default text. <code>attributes</code> renames a field in every message (<code>:field</code> and <code>:attribute</code> are interchangeable):</p>
+<pre><code class="language-php">return [
+    'required' => 'Please fill in :attribute.',
+    'custom' => [
+        'email' => ['required' => 'We need your email address.'],
+    ],
+    'attributes' => [
+        'email' => 'email address',
+        'dob' => 'date of birth',
+    ],
+];</code></pre>
+
+            <h2>Adding a locale</h2>
+<pre><code class="language-bash">php console.php make:lang bn            # copies lang/en/*.php (and en.json) to bn
+php console.php lang:missing bn         # keys en has that bn lacks, or that are still identical to en
+php console.php lang:list               # locales and key counts</code></pre>
+            <p>Translate the values and keep the keys. <code>lang:missing</code> exits non-zero when keys are missing, so it can run in CI.</p>
+
+            <h2>Runtime lines and tests</h2>
+<pre><code class="language-php">lang_add('en', 'shop', ['total' => 'Total: :amount']);   // packages, tests
+lang_reset();                                              // forget loaded files and the chosen locale
+config_set('app.lang_path', $directory);                   // read lines from somewhere else</code></pre>
+            <p>The test runner resets the locale and the loaded lines between tests. Pass a header to exercise detection: <code>http_get('/', ['Accept-Language' => 'bn'])</code>.</p>
+
+            <h2>Configuration</h2>
+            <div class="table-wrap">
+            <table>
+                <tr><th>Key</th><th>Default</th><th>Meaning</th></tr>
+                <tr><td><code>app.locale</code> (<code>APP_LOCALE</code>)</td><td><code>en</code></td><td>Locale when nothing else chooses one</td></tr>
+                <tr><td><code>app.fallback_locale</code> (<code>APP_FALLBACK_LOCALE</code>)</td><td><code>en</code></td><td>Second lookup for missing keys</td></tr>
+                <tr><td><code>app.lang_path</code></td><td><code>lang/</code></td><td>Where the files live</td></tr>
+            </table>
+            </div>
+        </article>
+        <nav class="pager" id="pager"></nav>
+    </main>
+    <aside class="toc" id="toc"></aside>
+</div>
+<script src="assets/docs.js"></script>
+</body>
+</html>

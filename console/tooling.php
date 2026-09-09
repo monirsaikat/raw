@@ -504,7 +504,7 @@ function crud_view_show_stub(array $n, array $fields): string
         <section class="container mb-5">
             <div class="row justify-content-center">
                 <div class="col-md-8">
-                    <div class="contact-card">
+                    <div class="form-card">
                         <dl class="row mb-0">
         $rows                </dl>
                     </div>
@@ -552,7 +552,7 @@ function crud_view_create_stub(array $n): string
         <section class="container mb-5">
             <div class="row justify-content-center">
                 <div class="col-md-7">
-                    <div class="contact-card">
+                    <div class="form-card">
                         <form method="post" action="{navigate name='$r.store'}" novalidate>
                             {csrf_field}
                             {include file='{$n['table']}/_form.tpl' {$n['variable']}=null}
@@ -591,7 +591,7 @@ function crud_view_edit_stub(array $n): string
         <section class="container mb-5">
             <div class="row justify-content-center">
                 <div class="col-md-7">
-                    <div class="contact-card">
+                    <div class="form-card">
                         <form method="post" action="{navigate name='$r.update' id=\$$v.id}" novalidate>
                             {csrf_field}
                             {method_field method='PUT'}

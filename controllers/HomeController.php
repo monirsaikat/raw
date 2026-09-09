@@ -1,21 +1,16 @@
 <?php
 
+// The starter page. Replace it with your own controllers
+// (`php console.php make:controller Post`) and delete views/home.tpl.
+
 class HomeController
 {
-    public function index()
+    public function index(): string
     {
         return view('home', [
-            'items' => [
-                ['rank' => 1, 'initial' => 'A', 'title' => 'Item One', 'description' => 'Placeholder description for the first item in the list.', 'meta' => '$120'],
-                ['rank' => 2, 'initial' => 'B', 'title' => 'Item Two', 'description' => 'Placeholder description for the second item in the list.', 'meta' => '$98'],
-                ['rank' => 3, 'initial' => 'C', 'title' => 'Item Three', 'description' => 'Placeholder description for the third item in the list.', 'meta' => '$76'],
-                ['rank' => 4, 'initial' => 'D', 'title' => 'Item Four', 'description' => 'Placeholder description for the fourth item in the list.', 'meta' => '$54'],
-            ],
+            'php_version' => PHP_VERSION,
+            'framework_version' => trim((string) @file_get_contents(BASE_PATH . '/VERSION')),
+            'locales' => lang_available(),
         ]);
-    }
-
-    public function about()
-    {
-        return view('about');
     }
 }

@@ -52,7 +52,7 @@ fi
 mkdir -p "$target/storage/logs" "$target/storage/cache" "$target/storage/views" "$target/bootstrap/cache"
 
 # The scaffolded app starts as its own project.
-rm -rf "$target/.git" "$target/benchmarks" "$target/create-project.sh"
+rm -rf "$target/.git" "$target/create-project.sh"
 
 echo "Skeleton copied to $target"
 echo

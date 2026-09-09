@@ -4,8 +4,10 @@
 // parameters given after a colon in the route definition, e.g. the spec
 // 'throttle:5,1' calls the 'throttle' handler as fn($next, '5', '1').
 
-$middlewareRegistry = [];
-$globalMiddleware = ['csrf'];
+// $GLOBALS so the values are shared even when bootstrap.php is included from
+// inside a function (test runners, static analysers).
+$GLOBALS['middlewareRegistry'] = [];
+$GLOBALS['globalMiddleware'] = ['csrf'];
 
 // middleware('admin', fn (callable $next) => ...) or middleware('admin',
 // AdminMiddleware::class) — a class built by the container with a

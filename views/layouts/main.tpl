@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{$app_locale|default:'en'}">
 
 <head>
     <meta charset="utf-8">
@@ -30,33 +30,15 @@
 
             <div class="collapse navbar-collapse" id="siteNav">
                 <ul class="navbar-nav ms-auto align-items-md-center gap-md-2">
+                    {* Add your links here, e.g.
+                       <li class="nav-item"><a class="nav-link{if 'posts.*'|route_is} active{/if}" href="{navigate name='posts.index'}">Posts</a></li>
+                       {if $auth_user} ... {$auth_user.name} ... {else} ... {/if} *}
                     <li class="nav-item">
-                        <a class="nav-link{if 'home'|route_is} active{/if}" href="{navigate name='home'}">Home</a>
+                        <a class="nav-link{if 'home'|route_is} active{/if}" href="{navigate name='home'}">{t key='messages.nav_home'}</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link{if 'about'|route_is} active{/if}" href="{navigate name='about'}">About</a>
+                        <a class="nav-link" href="{url path='docs/index.html'}">{t key='messages.nav_docs'}</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link{if 'contact'|route_is} active{/if}" href="{navigate name='contact'}">Contact</a>
-                    </li>
-                    {if $auth_user}
-                        <li class="nav-item">
-                            <a class="nav-link{if 'account'|route_is} active{/if}" href="{navigate name='account'}">{$auth_user.name}</a>
-                        </li>
-                        <li class="nav-item ms-md-2">
-                            <form method="post" action="{navigate name='logout'}" class="d-inline">
-                                {csrf_field}
-                                <button type="submit" class="btn btn-brand-outline btn-sm px-3">Log out</button>
-                            </form>
-                        </li>
-                    {else}
-                        <li class="nav-item">
-                            <a class="nav-link{if 'login'|route_is} active{/if}" href="{navigate name='login'}">Login</a>
-                        </li>
-                        <li class="nav-item ms-md-2">
-                            <a class="btn btn-brand btn-sm px-3" href="{navigate name='register'}">Sign up</a>
-                        </li>
-                    {/if}
                 </ul>
             </div>
         </div>
@@ -68,12 +50,8 @@
 
     <footer class="site-footer">
         <div class="container d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
-            <span>&copy; {current_year} {$app_name}. All rights reserved.</span>
-            <div class="d-flex gap-3">
-                <a href="{navigate name='home'}">Home</a>
-                <a href="{navigate name='about'}">About</a>
-                <a href="{navigate name='contact'}">Contact</a>
-            </div>
+            <span>&copy; {current_year} {$app_name}</span>
+            <span>{t key='messages.footer_built_with'}</span>
         </div>
         {if $app_debug}
             <div class="container mt-2 small text-muted">{perf_stats}</div>

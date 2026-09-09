@@ -73,6 +73,16 @@
                 <tr><td><code>validator_extend($name, $rule, $message)</code></td><td>Register a rule</td></tr>
             </table></div>
 
+            <h2>Localization</h2>
+            <div class="table-wrap"><table>
+                <tr><td><code>__($key, $replace, $locale)</code>, <code>trans(...)</code></td><td>Translated line, the fallback locale's, or the key</td></tr>
+                <tr><td><code>trans_choice($key, $count, $replace, $locale)</code></td><td>Plural form for a count or countable</td></tr>
+                <tr><td><code>app_locale()</code>, <code>set_locale($locale, $remember)</code>, <code>locale_is(...)</code>, <code>fallback_locale()</code></td><td>The current locale</td></tr>
+                <tr><td><code>lang_available()</code>, <code>lang_exists($locale)</code>, <code>lang_has($key, $locale)</code></td><td>What is in <code>lang/</code></td></tr>
+                <tr><td><code>lang_add($locale, $group, $lines)</code>, <code>lang_reset()</code>, <code>lang_path($locale)</code></td><td>Runtime lines; forget loaded files</td></tr>
+                <tr><td><code>lang_detect($parameter)</code>, <code>lang_accepted()</code></td><td>Best locale for the request; Accept-Language tags by quality</td></tr>
+            </table></div>
+
             <h2>Session, flash, cache, rate limiting</h2>
             <div class="table-wrap"><table>
                 <tr><td><code>session_get / session_set / session_has / session_pull / session_forget / session_all / session_flush / session_regenerate / session_invalidate</code></td><td>Session data</td></tr>

@@ -18,6 +18,10 @@ php console.php test            # runs tests/*.php (database tests use in-memory
 On Apache the app also works from a sub-directory (`/saikat/test1/`) with no
 configuration; `.htaccess` routes everything through `index.php`.
 
+A fresh checkout serves one route, `/`, from `HomeController` and
+`views/home.tpl`: a starter page with the next steps. Replace it with your
+own routes (or run `make:crud`) and delete the `messages.*` lang keys it uses.
+
 ## Layout
 
 | Path | Purpose |
@@ -26,9 +30,10 @@ configuration; `.htaccess` routes everything through `index.php`.
 | `core/` | The framework. Function files (`route.php`, `http.php`, …) and classes (`Model`, `QueryBuilder`, `Schema`, …) |
 | `config/` | Plain PHP arrays read with `config('app.name')`; values come from `.env` via `env()` |
 | `routes/web.php` | Route definitions |
-| `controllers/`, `models/`, `services/` | Autoloaded app classes |
+| `controllers/`, `models/`, `jobs/`, `listeners/`, `mail/` | Autoloaded app classes |
 | `middleware/` | App middleware, one file per handler, loaded automatically |
 | `policies/` | Authorization: `<Model>Policy` classes and `gates.php` |
+| `lang/` | Translations: `en/messages.php`, `en/validation.php`, … read with `__()` |
 | `views/` | Smarty templates: `layouts/`, `includes/`, `errors/`, pages |
 | `database/migrations/` | PHP (schema builder) or SQL migrations; `seeders/`, `factories/` |
 | `storage/` | Logs, cache, compiled templates, SQLite files (git-ignored, web-blocked) |
@@ -398,7 +403,8 @@ is never called for guests; the ability is simply denied.
 outdated hashes and logs in. `auth_user()` (Model or null), `auth_check()`,
 `auth_id()`, `auth_login($user, $remember)`, `auth_logout()`,
 `auth_intended($default)` after login. Middleware: `auth` (redirects to the
-login route, remembers the intended URL, 401 for JSON) and `guest`.
+`login` route, or `auth.login_path` when no such route exists, remembers the
+intended URL, 401 for JSON) and `guest`.
 Remember-me stores an HMAC of the cookie token in `users.remember_token`.
 Settings: `config/auth.php`.
 
@@ -432,16 +438,40 @@ route, per group, or with `add_global_middleware('admin')`.
 
 ## Views
 
-`view('auth/login', [...])` renders `views/auth/login.tpl`. Every template gets
-`$app_name`, `$auth_user`, `$errors`, `$old`, `$flash`, `$current_route`;
+`view('posts/show', [...])` renders `views/posts/show.tpl`. Every template gets
+`$app_name`, `$auth_user`, `$errors`, `$old`, `$flash`, `$current_route`,
+`$app_locale`, `$app_env`;
 `View::share('key', $value)` adds more. Output is auto-escaped; `{$html|raw}`
 opts out. Tags: `{csrf_field}`, `{csrf_meta}`, `{method_field method='DELETE'}`,
-`{navigate}`, `{url}`, `{asset}`, `{current_year}`, `{csp_nonce}`. Inline
+`{navigate}`, `{url}`, `{asset}`, `{current_year}`, `{csp_nonce}`,
+`{t key='messages.welcome' app=$app_name}`. Inline
 scripts need `<script nonce="{csp_nonce}">` because the Content-Security-Policy
 allows only same-origin scripts (see `config/security.php`).
 
 Custom error pages: add `views/errors/404.tpl`; `errors/error.tpl` is the
 fallback for every status.
+
+## Localization
+
+Strings live in `lang/<locale>/<group>.php` (arrays) or `lang/<locale>.json`
+(flat sentences). Missing keys fall back to `APP_FALLBACK_LOCALE`, then to the
+key itself.
+
+```php
+__('messages.welcome', ['app' => app_name()]);   // lang/en/messages.php['welcome'] → "Welcome to Shop"
+__('Save changes');                              // lang/en.json, or the key itself
+trans_choice('messages.items', $count);          // '{0} No items|{1} One item|[2,*] :count items'
+set_locale('bn');  app_locale();  lang_available();
+```
+
+Templates: `{t key='messages.welcome' app=$app_name}`, `{'auth.failed'|__}`,
+`{'messages.items'|trans_choice:$n}`, `<html lang="{$app_locale}">`. The
+`locale` middleware (global) picks the language from `?lang=` (remembered in
+the session), the session, then `Accept-Language`, restricted to the locales
+present in `lang/`. `lang/<locale>/validation.php` translates validation
+messages and names fields (`attributes`); `pagination.php` labels the links.
+`php console.php make:lang bn` starts a locale from `en`, `lang:missing bn`
+lists untranslated keys, `lang:list` shows what exists.
 
 ## Errors and logging
 
@@ -515,11 +545,10 @@ php console.php bench:http http://localhost/myapp/ --requests=1000 --concurrency
 ```
 
 Reference numbers and methodology are in `docs/performance.html`. A measured
-comparison against Laravel, Symfony and plain PHP on the same machine, with a
-setup script to reproduce it, lives in `docs/comparison.html` and `benchmarks/`:
+comparison against Laravel, Symfony and plain PHP on the same machine is in
+`docs/comparison.html`; reproduce it against your own installs with:
 
 ```bash
-bash benchmarks/setup.sh /path/to/bench          # installs Laravel + Symfony with the same routes
 php console.php bench:compare comfree=http://localhost/app/ laravel=http://localhost/bench/laravel/public/bench/page
 ```
 

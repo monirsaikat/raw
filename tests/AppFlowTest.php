@@ -2,7 +2,8 @@
 
 // End-to-end tests of the real routes, controllers and views on an
 // in-memory SQLite database. Every test runs inside a transaction that is
-// rolled back afterwards, so tests never see each other's rows.
+// rolled back afterwards, so tests never see each other's rows. Add tests
+// for your own routes here or in new files (make:crud writes one).
 
 class TestUserPolicy
 {
@@ -16,10 +17,6 @@ before_each(function () {
     use_test_database();
     http_use_app_routes();
     Database::beginTransaction();
-
-    foreach (['/login', '/register', '/contact'] as $path) {
-        rate_limit_clear('203.0.113.1|POST|' . $path);
-    }
 });
 
 after_each(function () {
@@ -28,95 +25,46 @@ after_each(function () {
     }
 });
 
-test('public pages render inside the layout', function () {
-    http_get('/')->assertOk()->assertSee(app_name())->assertSee('href="/about"')->assertSee('Login');
-    http_get('/about')->assertOk();
-    http_get('/contact')->assertOk()->assertSee('name="_token"');
+test('the starter page renders inside the layout', function () {
+    http_get('/')->assertOk()
+        ->assertSee(app_name())
+        ->assertSee(__('messages.eyebrow'))
+        ->assertSee('routes/web.php')
+        ->assertSee('PHP ' . PHP_VERSION)
+        ->assertSee('<html lang="en">');
+
     http_get('/nope')->assertNotFound()->assertSee('404');
     http_json('GET', '/nope')->assertNotFound()->assertJson(['message' => 'Not Found']);
-    http_json('GET', '/api/ping')->assertOk()->assertJson(['pong' => true])->assertJsonPath('user', null);
+    http_post('/')->assertStatus(405)->assertHeader('Allow');
 });
 
-test('the contact form validates, stores the message and flashes a confirmation', function () {
-    http_get('/contact');
+test('?lang= switches the page language and is remembered', function () {
+    lang_add('fr', 'messages', ['eyebrow' => 'Votre application fonctionne']);
+    $dir = lang_path('fr');
+    @mkdir($dir, 0777, true);
 
-    http_post('/contact', ['name' => '', 'email' => 'bad', 'message' => 'hi'])
-        ->assertRedirect('/contact')
-        ->assertSessionHasErrors(['name', 'email'])
-        ->assertValid('message');
+    try {
+        add_global_middleware('locale');
 
-    http_get('/contact')->assertOk()->assertSee('The name field is required.')->assertSee('value="bad"');
-
-    http_post('/contact', ['name' => 'Ann', 'email' => 'ann@example.com', 'message' => 'Hello there'])
-        ->assertRedirect('/contact')
-        ->assertSessionHasNoErrors();
-
-    http_get('/contact')->assertSee('Thanks, Ann!');
-
-    assert_database_has('messages', ['email' => 'ann@example.com', 'message' => 'Hello there']);
-    assert_same(1, Message::count());
+        http_get('/?lang=fr')->assertOk()->assertSee('Votre application fonctionne')->assertSee('<html lang="fr">');
+        http_get('/')->assertOk()->assertSee('Votre application fonctionne');
+        http_get('/?lang=en')->assertOk()->assertSee(__('messages.eyebrow', [], 'en'));
+    } finally {
+        @rmdir($dir);
+    }
 });
 
-test('registration creates the account and logs the user in', function () {
-    http_get('/register');
-
-    http_post('/register', [
-        'name' => 'New User',
-        'email' => 'new@example.com',
-        'password' => 'secret123',
-        'password_confirmation' => 'secret123',
-    ])->assertRedirect('/account')->assertAuthenticated();
-
-    http_get('/account')->assertOk()->assertSee('Welcome, New User');
-    http_get('/register')->assertRedirect('/');
-
-    assert_database_has('users', ['email' => 'new@example.com']);
-    assert_true(User::first()->verifyPassword('secret123'));
-
-    acting_as(null);
-    http_get('/register');
-    http_post('/register', [
-        'name' => 'Dup',
-        'email' => 'new@example.com',
-        'password' => 'secret123',
-        'password_confirmation' => 'secret123',
-    ])->assertRedirect('/register')->assertSessionHasErrors(['email' => 'An account with this email already exists.']);
-});
-
-test('login redirects to the intended page; wrong credentials show an error', function () {
+test('the users migration, factory and auth helpers work together', function () {
     $user = User::factory()->create(['email' => 'ann@example.com']);
 
-    http_get('/account')->assertRedirect('/login')->assertSessionHas('_intended');
-    http_get('/login')->assertOk();
+    assert_database_has('users', ['email' => 'ann@example.com']);
+    assert_true($user->verifyPassword('password'));
+    assert_not_null($user->created_at);
+    assert_same($user->id, User::findByEmail('ann@example.com')?->id);
 
-    http_post('/login', ['email' => 'ann@example.com', 'password' => 'wrong'])
-        ->assertRedirect('/login')
-        ->assertSessionHasErrors('email')
-        ->assertGuest();
-
-    http_get('/login')->assertSee('Those credentials do not match our records.')->assertSee('value="ann@example.com"');
-
-    http_post('/login', ['email' => 'ann@example.com', 'password' => 'password'])
-        ->assertRedirect('/account')
-        ->assertAuthenticated($user);
-
-    http_get('/account')->assertOk()->assertSee($user->name)->assertSee('Log out');
-    http_get('/login')->assertRedirect('/');
-
-    http_post('/logout')->assertRedirect('/')->assertGuest();
-    http_get('/account')->assertRedirect('/login');
-});
-
-test('the api reports the logged-in user without secrets', function () {
-    $user = User::factory()->create();
-
-    acting_as($user);
-
-    http_json('GET', '/api/ping')->assertOk()
-        ->assertJsonPath('user.name', $user->name)
-        ->assertJsonPath('user.email', $user->email)
-        ->assertJsonMissing('user.password')
-        ->assertJsonMissing('user.remember_token');
+    assert_true(auth_attempt('ann@example.com', 'password'));
+    assert_same($user->id, auth_id());
+    assert_false(auth_attempt('ann@example.com', 'wrong'));
 });
 
 test('policies protect routes through the can middleware and route model binding', function () {
@@ -124,6 +72,7 @@ test('policies protect routes through the can middleware and route model binding
     $ann = User::factory()->create();
     $bob = User::factory()->create();
 
+    get('/login', fn () => 'login', 'login');
     get('/users/{id}/edit', fn (User $user) => 'editing ' . $user->name, null, ['auth', 'can:update,User@id']);
 
     http_get('/users/' . $ann->id . '/edit')->assertRedirect('/login');
@@ -137,13 +86,15 @@ test('policies protect routes through the can middleware and route model binding
     assert_false($ann->can('update', $bob));
 });
 
-test('repeated login attempts are throttled', function () {
-    http_get('/login');
+test('the throttle middleware limits repeated requests', function () {
+    rate_limit_clear('203.0.113.1|POST|/attempt');
+    post('/attempt', fn () => 'ok', 'attempt', ['throttle:3,1']);
+    global_middleware([]);
 
-    for ($i = 0; $i < 5; $i++) {
-        http_post('/login', ['email' => 'x@example.com', 'password' => 'bad'])->assertRedirect('/login');
+    for ($i = 0; $i < 3; $i++) {
+        http_post('/attempt')->assertOk();
     }
 
-    http_post('/login', ['email' => 'x@example.com', 'password' => 'bad'])->assertStatus(429)->assertHeader('Retry-After');
-    http_json('POST', '/login', ['email' => 'x@example.com', 'password' => 'bad'])->assertStatus(429);
+    http_post('/attempt')->assertStatus(429)->assertHeader('Retry-After');
+    http_json('POST', '/attempt')->assertStatus(429);
 });

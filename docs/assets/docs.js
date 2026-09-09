@@ -33,6 +33,7 @@
             ['events.html', 'Events'],
             ['queue.html', 'Queue'],
             ['mail.html', 'Mail'],
+            ['localization.html', 'Localization'],
             ['errors-logging.html', 'Errors and logging'],
             ['security.html', 'Security'],
         ]},

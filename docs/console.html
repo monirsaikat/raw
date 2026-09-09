@@ -72,6 +72,7 @@
                 <tr><td><code>queue:size [queue]</code>, <code>queue:failed</code>, <code>queue:retry &lt;id|all&gt;</code>, <code>queue:forget &lt;id&gt;</code>, <code>queue:flush [--jobs]</code></td><td>Inspect and manage pending and failed jobs.</td></tr>
                 <tr><td><code>make:job Name</code>, <code>make:listener Name [--event=user.registered] [--queued]</code>, <code>make:mail Name</code></td><td>Stubs in <code>jobs/</code>, <code>listeners/</code> and <code>mail/</code> (plus <code>views/mail/</code>).</td></tr>
                 <tr><td><code>event:list</code></td><td>Every registered event and its listeners.</td></tr>
+                <tr><td><code>make:lang bn [--from=en]</code>, <code>lang:missing bn</code>, <code>lang:list</code></td><td>Start a locale from the fallback files; report missing or untranslated keys (non-zero exit for CI); list locales. See <a href="localization.html">Localization</a>.</td></tr>
                 <tr><td><code>mail:test &lt;address&gt;</code></td><td>Sends a test message through the configured mailer and prints the result. See <a href="mail.html">Mail</a>.</td></tr>
             </table>
             </div>

@@ -82,7 +82,7 @@ php console.php bench:http http://localhost/myapp/api/ping --requests=1000 --con
             <p>Measured on 8 September 2026 on a machine that was also running other work, with the load client on the same machine. The <code>X-Response-Time</code> header on the same pages reads about 6 ms for the home page and under 2 ms for the JSON endpoint, so most of the wall-clock time above is Apache, the session file write, the network stack and the client rather than the framework. See the <a href="comparison.html">Comparison</a> page for the same endpoints next to Laravel, Symfony and plain PHP.</p>
 
             <h2>Comparing with other frameworks</h2>
-            <p>The <a href="comparison.html">Comparison</a> page publishes measured numbers against Laravel, Symfony and plain PHP on the same machine, and <code>php console.php bench:compare name=url ...</code> runs the same alternating-round ApacheBench comparison against any set of URLs. The <code>benchmarks/</code> folder holds the equivalent routes and templates for the other frameworks plus a setup script, so anyone can reproduce the table on their own hardware.</p>
+            <p>The <a href="comparison.html">Comparison</a> page publishes measured numbers against Laravel, Symfony and plain PHP on the same machine, and <code>php console.php bench:compare name=url ...</code> runs the same alternating-round ApacheBench comparison against any set of URLs. The <a href="comparison.html">Comparison</a> page describes the two routes each framework needs, so anyone can reproduce the table on their own hardware.</p>
 
             <h2>What costs the most</h2>
             <ul>

@@ -268,7 +268,12 @@ middleware('auth', function (callable $next) {
         session_set('_intended', request_url());
     }
 
-    return redirect_route((string) config('auth.login_route', 'login'));
+    // A named login route when the app defines one, else the login_path.
+    $login = (string) config('auth.login_route', 'login');
+
+    return isset(route_names()[$login])
+        ? redirect_route($login)
+        : redirect(url((string) config('auth.login_path', '/login')));
 });
 
 middleware('guest', function (callable $next) {
